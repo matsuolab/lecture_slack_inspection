@@ -5,15 +5,17 @@
 インフラ（AWS CDK）のセットアップ手順は [infra/README.md](infra/README.md) に記載しています。
 
 
-本リポジトリは「アプリコード」と「インフラコード」を分離(随時更新お願いします。)
+本リポジトリは「アプリコード」と「インフラコード」を分離しています。（※必要に応じて随時更新）
 
+```text
 repo/
-├── infra/ 
-├── app/　
-│ ├── handlers/　
-│ └── services/
-└── evals/
+├── infra/
+├── app/
+│   ├── handlers/
+│   └── services/
+├── evals/
 └── prompts/
+
 
 
 ### infra/
