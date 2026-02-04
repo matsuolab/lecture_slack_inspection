@@ -9,8 +9,10 @@
 
 - **Python**（推奨: 3.11 以上）
 - **Node.js**（`npx` を使うため）
-<!-- - **AWS 認証情報**（`deploy` や `diff` をする人のみ）
-  - 例：AWS SSO / IAMユーザーのアクセスキー / Assume Role など -->
+<!--
+- **AWS 認証情報**（`deploy` や `diff` をする人のみ）
+  - 例：AWS SSO / IAMユーザーのアクセスキー / Assume Role など
+-->
 
 ---
 
@@ -34,10 +36,11 @@ python -m venv .venv
 python -m pip install -U pip
 python -m pip install -r requirements.txt
 
-## ② macOS セットアップ（反映・崩れ防止版）
-いまの記述もコードブロックに入れた方が読みやすいです。
+# Synth（テンプレ生成）
+npx aws-cdk@2 synth
+```
 
-```md
+
 ## セットアップ（macOS / Linux）
 
 ```bash
@@ -51,10 +54,4 @@ python -m pip install -r requirements.txt
 
 # Synth（テンプレ生成）
 npx aws-cdk@2 synth
-
-# 開発用requirementsがある場合のみ
-# python -m pip install -r requirements-dev.txt
-
-
-# 開発用requirementsがある場合のみ
-# python -m pip install -r requirements-dev.txt
+```
