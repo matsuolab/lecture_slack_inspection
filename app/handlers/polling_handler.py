@@ -16,7 +16,8 @@ from slack_sdk.errors import SlackApiError
 from app.services import (
     ViolationDetector, init_notion_client,
     check_duplicate_violation, create_violation_log,
-    notify_admin, get_user_name,
+    notify_admin, get_user_name, send_warning_reply,
+    query_by_status, update_violation_status,
 )
 
 logger = logging.getLogger()
@@ -177,6 +178,27 @@ def handle_violation(
         )
 
 
+def process_pending_warnings(client: WebClient) -> int:
+    """「警告送信」ステータスの違反を処理"""
+    logs = query_by_status("警告送信")
+    logger.info(f"Found {len(logs)} pending warnings")
+
+    processed = 0
+    for log in logs:
+        if send_warning_reply(client, log):
+            update_violation_status(
+                page_id=log["page_id"],
+                status="警告送信済",
+                warning_sent_at=datetime.now()
+            )
+            processed += 1
+            logger.info(f"Warning sent and status updated: {log['page_id']}")
+        else:
+            logger.error(f"Failed to send warning: {log['page_id']}")
+
+    return processed
+
+
 def lambda_handler(event, context):
     logger.info("Lambda invoked")
     start = time.time()
@@ -202,8 +224,11 @@ def lambda_handler(event, context):
         for ch in channels:
             total += check_channel(client, detector, ch, bot_id, admin_ch, lookback)
 
+        # 「警告送信」ステータスの処理
+        warnings_sent = process_pending_warnings(client)
+
         elapsed = time.time() - start
-        logger.info(f"Done in {elapsed:.2f}s. Violations: {total}")
+        logger.info(f"Done in {elapsed:.2f}s. Violations: {total}, Warnings: {warnings_sent}")
 
         return {
             "statusCode": 200,
@@ -211,6 +236,7 @@ def lambda_handler(event, context):
                 "message": "OK",
                 "channels_checked": len(channels),
                 "violations_found": total,
+                "warnings_sent": warnings_sent,
                 "elapsed_seconds": round(elapsed, 2),
             })
         }

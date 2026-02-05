@@ -1,6 +1,9 @@
 """Notion API"""
+import logging
 import requests
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 _config = {"api_key": None, "db_id": None, "headers": None}
 NOTION_VERSION = "2022-06-28"
@@ -94,3 +97,73 @@ def create_violation_log(
         props["投稿者"]["rich_text"][0]["text"]["content"] = f"{user_id} | 理由: {reason[:100]}"
 
     return _create_page(_config["db_id"], props)
+
+
+def query_by_status(status: str) -> list:
+    """指定ステータスの違反ログを取得"""
+    if not _config["db_id"]:
+        return []
+
+    try:
+        results = _query(_config["db_id"], {
+            "property": "対応ステータス",
+            "select": {"equals": status}
+        })
+        return _parse_violation_logs(results)
+    except Exception:
+        return []
+
+
+def _parse_violation_logs(results: list) -> list:
+    """Notion結果をパース"""
+    logs = []
+    for page in results:
+        props = page["properties"]
+        logs.append({
+            "page_id": page["id"],
+            "post_content": _get_title(props.get("投稿内容", {})),
+            "user_id": _get_text(props.get("投稿者", {})),
+            "channel": _get_text(props.get("チャンネル", {})),
+            "category": _get_select(props.get("判定結果", {})),
+            "article_id": _get_text(props.get("該当条文", {})),
+            "post_link": props.get("投稿リンク", {}).get("url"),
+            "status": _get_select(props.get("対応ステータス", {})),
+        })
+    return logs
+
+
+def _get_title(prop: dict) -> str:
+    if prop.get("title") and len(prop["title"]) > 0:
+        return prop["title"][0].get("plain_text", "")
+    return ""
+
+
+def _get_text(prop: dict) -> str:
+    if prop.get("rich_text") and len(prop["rich_text"]) > 0:
+        return prop["rich_text"][0].get("plain_text", "")
+    return ""
+
+
+def _get_select(prop: dict) -> str:
+    if prop.get("select"):
+        return prop["select"].get("name", "")
+    return ""
+
+
+def update_violation_status(page_id: str, status: str, warning_sent_at: datetime = None) -> bool:
+    """違反ログのステータスを更新"""
+    url = f"https://api.notion.com/v1/pages/{page_id}"
+
+    props = {"対応ステータス": {"select": {"name": status}}}
+    if warning_sent_at:
+        props["警告送信日時"] = {"date": {"start": warning_sent_at.isoformat()}}
+
+    try:
+        resp = requests.patch(url, headers=_config["headers"], json={"properties": props})
+        if resp.status_code != 200:
+            logger.error(f"Failed to update status: {resp.status_code} - {resp.text}")
+            return False
+        return True
+    except Exception as e:
+        logger.error(f"Exception updating status: {e}")
+        return False
