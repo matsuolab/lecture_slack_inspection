@@ -9,12 +9,13 @@
 
 ```text
 repo/
-├── infra/
-├── app/
-│   ├── handlers/
-│   └── services/
-├── evals/
-└── prompts/
+├── infra/                 # AWS CDK (API Gateway / Lambda / IAM / etc.)
+├── lambda/                # Lambdaのアプリコード（関数単位）
+│   ├── app_inspect/       # Slack投稿を受け取り検査（OpenAI等）→ Slack返信
+│   └── app_alert/         # 承認ボタン等を受け取り → 元投稿へ勧告通知
+├── evals/                 # プロンプト評価（例: promptfoo など）
+└── prompts/               # 本番用プロンプト置き場（必要に応じて）
+
 
 
 
