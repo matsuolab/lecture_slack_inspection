@@ -71,8 +71,8 @@ class InfraStack(Stack):
             self,
             "LambdaA_SlackPostProcessor",
             runtime=_lambda.Runtime.PYTHON_3_12,
-            handler="handler.handler",  # 例: lambda_a/app.py の handler
-            code=_lambda.Code.from_asset("../lambda/app_inspect"),
+            handler="app_inspect.handler.handler",  # 例: lambda_a/app.py の handler
+            code=_lambda.Code.from_asset("../lambda"),
             timeout=Duration.seconds(30),
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
@@ -90,8 +90,8 @@ class InfraStack(Stack):
             self,
             "LambdaB_ViolationNotice",
             runtime=_lambda.Runtime.PYTHON_3_12,
-            handler="handler.handler",  # 例: lambda_b/app.py の handler
-            code=_lambda.Code.from_asset("../lambda/app_alert"),
+            handler="app_alert.handler.handler",  # 例: lambda_b/app.py の handler
+            code=_lambda.Code.from_asset("../lambda"),
             timeout=Duration.seconds(30),
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
