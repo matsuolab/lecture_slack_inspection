@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "alert_button_value.schema.json",
+  "title": "Slack Alert Button Value (A -> B contract)",
+  "type": "object",
+  "required": ["trace_id", "origin_channel", "origin_ts"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Contract version string, e.g. 'v1'"
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "E1 trace id. LambdaB must reuse this for logs."
+    },
+    "origin_channel": {
+      "type": "string",
+      "description": "Channel ID of the original (violating) post."
+    },
+    "origin_ts": {
+      "type": "string",
+      "description": "Message ts of the original (violating) post."
+    },
+    "origin_user": {
+      "type": "string",
+      "description": "User ID of the original poster (optional)."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Short reason label for violation (optional)."
+    },
+    "policy_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Policy / guideline references (optional)."
+    },
+    "detected_at": {
+      "type": "string",
+      "description": "ISO timestamp when detected (optional)."
+    }
+  },
+  "additionalProperties": true
+}

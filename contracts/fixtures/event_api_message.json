@@ -1,0 +1,7 @@
+{
+  "headers": {
+    "content-type": "application/json"
+  },
+  "isBase64Encoded": false,
+  "body": "{\"type\":\"event_callback\",\"team_id\":\"T_TEST\",\"event_id\":\"Ev_TEST_0001\",\"event\":{\"type\":\"message\",\"channel\":\"C_ORIGIN\",\"ts\":\"1700000000.12345\",\"text\":\"これはテスト投稿です\"}}"
+}
