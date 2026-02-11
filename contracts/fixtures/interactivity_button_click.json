@@ -1,0 +1,11 @@
+{
+  "team": { "id": "T_TEST" },
+  "channel": { "id": "C_PRIVATE" },
+  "message": { "ts": "1700000001.00001" },
+  "actions": [
+    {
+      "action_id": "approve_violation",
+      "value": "{\"version\":\"v1\",\"trace_id\":\"slack:Ev_TEST_0001\",\"origin_channel\":\"C_ORIGIN\",\"origin_ts\":\"1700000000.12345\",\"reason\":\"spam\",\"policy_refs\":[\"p3-2\"]}"
+    }
+  ]
+}
