@@ -5,8 +5,9 @@ from aws_cdk import (
     Duration,
     aws_apigateway as apigw,
     aws_lambda as _lambda,
-    aws_secretsmanager as secretsmanager,
+    aws_ssm as ssm,
     aws_logs as logs,
+    aws_iam as iam,
 )
 from constructs import Construct
 
@@ -16,101 +17,154 @@ class InfraStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # -----------------------------
-        # パラメータ定義
+        # 1. パラメータ定義 (SSMパラメータ名を受け取る)
         # -----------------------------
-        slack_bot_token_secret_name = CfnParameter(
+        # Slack Bot Token (xoxb-...)
+        slack_bot_token_param_name = CfnParameter(
             self,
-            "SlackBotTokenSecretName",
+            "SlackBotTokenParamName",
             type="String",
-            default="slack/bot/token",
-            description="Secrets Manager secret name that stores Slack Bot Token (xoxb-...).",
+            default="/slack/bot/token",
+            description="SSM Parameter name for Slack Bot Token (SecureString).",
         )
 
-        slack_signing_secret_name = CfnParameter(
+        # Slack Signing Secret
+        slack_signing_secret_param_name = CfnParameter(
             self,
-            "SlackSigningSecretName",
+            "SlackSigningSecretParamName",
             type="String",
-            default="slack/signing/secret",
-            description="Secrets Manager secret name that stores Slack Signing Secret.",
+            default="/slack/signing/secret",
+            description="SSM Parameter name for Slack Signing Secret (SecureString).",
         )
 
-        openai_api_key_secret_name = CfnParameter(
+        # OpenAI API Key
+        openai_api_key_param_name = CfnParameter(
             self,
-            "OpenAIApiKeySecretName",
+            "OpenAIApiKeyParamName",
             type="String",
-            default="openai/api/key",
-            description="Secrets Manager secret name that stores OpenAI API key.",
+            default="/openai/api/key",
+            description="SSM Parameter name for OpenAI API Key (SecureString).",
+        )
+
+        # Notion API Key
+        notion_api_key_param_name = CfnParameter(
+            self,
+            "NotionApiKeyParamName",
+            type="String",
+            default="/notion/api/key",
+            description="SSM Parameter name for Notion API Key (SecureString).",
+        )
+
+        # 通常の環境変数パラメータ
+        alert_private_channel_id = CfnParameter(
+            self,
+            "AlertPrivateChannelId",
+            type="String",
+            description="Slack private channel ID to post violation alerts (e.g., C0123...).",
+        )
+
+        notion_db_id = CfnParameter(
+            self,
+            "NotionDbId",
+            type="String",
+            description="Notion Database ID to store violation logs.",
         )
 
         # -----------------------------
-        # シークレットキー参照定義
+        # 2. SSMパラメータARNの構築ヘルパー
         # -----------------------------
-        slack_bot_token_secret = secretsmanager.Secret.from_secret_name_v2(
-            self,
-            "SlackBotTokenSecret",
-            slack_bot_token_secret_name.value_as_string,
-        )
-
-        slack_signing_secret = secretsmanager.Secret.from_secret_name_v2(
-            self,
-            "SlackSigningSecret",
-            slack_signing_secret_name.value_as_string,
-        )
-
-        openai_api_key_secret = secretsmanager.Secret.from_secret_name_v2(
-            self,
-            "OpenAIApiKeySecret",
-            openai_api_key_secret_name.value_as_string,
-        )
-
+        # SecureStringはCDKデプロイ時に値を取得できないため、ARNを構築してIAM権限で使用します
+        def get_param_arn(param_name: str) -> str:
+            # パラメータ名が "/" から始まる場合の処理を含める
+            clean_name = param_name if not param_name.startswith("/") else param_name[1:]
+            return f"arn:aws:ssm:{self.region}:{self.account}:parameter/{clean_name}"
 
         # -----------------------------
-        # Lambda A: Slack投稿処理 -> OpenAI -> Slack返信
+        # 3. Lambda A: Slack投稿監視 (app_inspect)
         # -----------------------------
-        lambda_a = _lambda.Function(
+        lambda_a = _lambda.DockerImageFunction(
             self,
-            "LambdaA_SlackPostProcessor",
-            runtime=_lambda.Runtime.PYTHON_3_12,
-            handler="handler.handler",  # 例: lambda_a/app.py の handler
-            code=_lambda.Code.from_asset("../lambda/app_inspect"),
+            "LambdaA_AppInspect",
+            code=_lambda.DockerImageCode.from_image_asset(
+                directory="../lambda/",
+                # 不要な app_alert 等を除外してイメージを軽量化
+                exclude=["app_alert", "app_alert/**", "tests", "contracts"],
+            ),
             timeout=Duration.seconds(30),
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
-                "SLACK_BOT_TOKEN_SECRET_ARN": slack_bot_token_secret.secret_arn,
-                "SLACK_SIGNING_SECRET_ARN": slack_signing_secret.secret_arn,
-                "OPENAI_API_KEY_SECRET_ARN": openai_api_key_secret.secret_arn,
+                # シークレットは値ではなく「パラメータ名」を渡す
+                "SLACK_BOT_TOKEN_PARAM_NAME": slack_bot_token_param_name.value_as_string,
+                "SLACK_SIGNING_SECRET_PARAM_NAME": slack_signing_secret_param_name.value_as_string,
+                "OPENAI_API_KEY_PARAM_NAME": openai_api_key_param_name.value_as_string,
+                "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
+                # 通常の値
+                "ALERT_PRIVATE_CHANNEL_ID": alert_private_channel_id.value_as_string,
+                "NOTION_DB_ID": notion_db_id.value_as_string,
+                # モックモード有効化 (OpenAI APIを呼ばずにテスト)
+                "USE_MOCK_OPENAI": "true",
             },
         )
 
+        # 【重要】DockerfileのCMDを上書きして app_inspect 用ハンドラーを指定
+        lambda_a.node.default_child.add_property_override(
+            "ImageConfig",
+            {"Command": ["app_inspect.handler.lambda_handler"]}
+        )
+
         # -----------------------------
-        # Lambda B: 違反投稿勧告通知(承認ボタン等) -> Slack
+        # 4. Lambda B: アラート対応 (app_alert)
         # -----------------------------
-        lambda_b = _lambda.Function(
+        lambda_b = _lambda.DockerImageFunction(
             self,
-            "LambdaB_ViolationNotice",
-            runtime=_lambda.Runtime.PYTHON_3_12,
-            handler="handler.handler",  # 例: lambda_b/app.py の handler
-            code=_lambda.Code.from_asset("../lambda/app_alert"),
+            "LambdaB_AppAlert",
+            code=_lambda.DockerImageCode.from_image_asset(
+                directory="../lambda/",
+                # 不要な app_inspect 等を除外
+                exclude=["app_inspect", "app_inspect/**", "tests", "contracts"],
+            ),
             timeout=Duration.seconds(30),
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
-                "SLACK_BOT_TOKEN_SECRET_ARN": slack_bot_token_secret.secret_arn,
-                "SLACK_SIGNING_SECRET_ARN": slack_signing_secret.secret_arn,
+                "SLACK_BOT_TOKEN_PARAM_NAME": slack_bot_token_param_name.value_as_string,
+                "SLACK_SIGNING_SECRET_PARAM_NAME": slack_signing_secret_param_name.value_as_string,
+                "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
+                "NOTION_DB_ID": notion_db_id.value_as_string,
             },
         )
 
-        # Sシークレットキーの読み取り権限をLambdaに付与
-        slack_bot_token_secret.grant_read(lambda_a)
-        slack_signing_secret.grant_read(lambda_a)
-        openai_api_key_secret.grant_read(lambda_a)
-
-        slack_bot_token_secret.grant_read(lambda_b)
-        slack_signing_secret.grant_read(lambda_b)
+        # 【重要】DockerfileのCMDを上書きして app_alert 用ハンドラーを指定
+        lambda_b.node.default_child.add_property_override(
+            "ImageConfig",
+            {"Command": ["app_alert.handler.lambda_handler"]}
+        )
 
         # -----------------------------
-        # API Gateway (Slack エンドポイント)
+        # 5. IAM権限付与 (SSM Parameter Store)
+        # -----------------------------
+        # 特定のパラメータのみ読み取りを許可するポリシー
+        # ssm_policy_statement = iam.PolicyStatement(
+        #     actions=["ssm:GetParameter"],
+        #     resources=[
+        #         get_param_arn(slack_bot_token_param_name.value_as_string),
+        #         get_param_arn(slack_signing_secret_param_name.value_as_string),
+        #         get_param_arn(openai_api_key_param_name.value_as_string),
+        #         get_param_arn(notion_api_key_param_name.value_as_string),
+        #     ]
+        # )
+        # 一時的な切り分け用: 全てのSSMパラメータを許可
+        ssm_policy_statement = iam.PolicyStatement(
+            actions=["ssm:GetParameter"],
+            resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter/*"]
+        )
+
+        lambda_a.add_to_role_policy(ssm_policy_statement)
+        lambda_b.add_to_role_policy(ssm_policy_statement)
+
+        # -----------------------------
+        # 6. API Gateway (Slack エンドポイント)
         # -----------------------------
         api = apigw.RestApi(
             self,
@@ -118,7 +172,7 @@ class InfraStack(Stack):
             rest_api_name="slack-bot-api",
             deploy_options=apigw.StageOptions(
                 stage_name="prod",
-                logging_level=apigw.MethodLoggingLevel.INFO,
+                logging_level=apigw.MethodLoggingLevel.OFF,
                 data_trace_enabled=False,
                 metrics_enabled=True,
                 throttling_rate_limit=50,
@@ -130,26 +184,30 @@ class InfraStack(Stack):
         events = slack_root.add_resource("events")
         interactions = slack_root.add_resource("interactions")
 
+        # POST /slack/events -> Lambda A
         events.add_method(
             "POST",
             apigw.LambdaIntegration(lambda_a, proxy=True),
         )
 
+        # POST /slack/interactions -> Lambda B
         interactions.add_method(
             "POST",
             apigw.LambdaIntegration(lambda_b, proxy=True),
         )
 
         # -----------------------------
-        # Outputs
+        # 7. Outputs
         # -----------------------------
         CfnOutput(
             self,
             "SlackEventsRequestUrl",
             value=f"{api.url}slack/events",
+            description="URL for Slack Event Subscription (Request URL)",
         )
         CfnOutput(
             self,
             "SlackInteractionsRequestUrl",
             value=f"{api.url}slack/interactions",
+            description="URL for Slack Interactivity (Request URL)",
         )
