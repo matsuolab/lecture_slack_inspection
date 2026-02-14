@@ -51,9 +51,15 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         # 6. アクションの特定
         actions = payload.get("actions", [])
-        if not actions or actions[0]["action_id"] != "approve_violation":
-            log_info(ctx, action="ignore_action", action_id=actions[0].get("action_id") if actions else None)
+        if not actions:
+            log_info(ctx, action="ignore_action", action_id=None)
             return {"statusCode": 200, "body": "OK"}
+
+        action_id = actions[0].get("action_id")
+        if action_id not in ("approve_violation", "dismiss_violation"):
+            log_info(ctx, action="ignore_action", action_id=action_id)
+            return {"statusCode": 200, "body": "OK"}
+
 
         # ボタンの value に埋め込まれた情報を復元
         try:
@@ -66,7 +72,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             log_error(ctx, action="extract_value", error=e)
             return {"statusCode": 200, "body": "Value parse error"}
 
-        if not origin_channel or not origin_ts:
+        if action_id == "approve_violation" and (not origin_channel or not origin_ts):
             log_info(ctx, action="missing_origin_info", result="stop")
             return {"statusCode": 200, "body": "Missing origin info"}
 
@@ -74,35 +80,62 @@ def lambda_handler(event: dict, context: Any) -> dict:
         slack = WebClient(token=cfg.slack_bot_token)
         notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
 
-        # ユーザーへ警告返信（スレッドに返信）
-        log_info(ctx, action="post_warning_to_user", channel=origin_channel)
-        slack.chat_postMessage(
-            channel=origin_channel,
-            thread_ts=origin_ts,
-            text=cfg.reply_prefix  # Configから取得
-        )
-
-        # Notionステータス更新
-        if notion_page_id:
-            log_info(ctx, action="update_notion", page_id=notion_page_id)
-            notion.update_status(notion_page_id, "対応済み")
-
-        # 管理者メッセージのボタンを消して完了状態にする
         container = payload.get("container", {})
-        if "channel_id" in container and "message_ts" in container:
-            log_info(ctx, action="update_admin_message")
-            slack.chat_update(
-                channel=container["channel_id"],
-                ts=container["message_ts"],
-                text="対応済み",
-                blocks=[
-                    {"type": "section", "text": {"type": "mrkdwn", "text": "✅ *対応完了* （警告送信済み）"}}
-                ]
+        admin_channel_id = container.get("channel_id")
+        admin_message_ts = container.get("message_ts")
+
+        if action_id == "approve_violation":
+            # ユーザーへ警告返信（スレッドに返信）
+            log_info(ctx, action="post_warning_to_user", channel=origin_channel)
+            slack.chat_postMessage(
+                channel=origin_channel,
+                thread_ts=origin_ts,
+                text=cfg.reply_prefix
             )
 
-        emit_metric(ctx, "AlertActionSuccess", 1)
-        emit_metric(ctx, "TotalLatencyMs", total_timer.ms(), unit="Milliseconds")
-        return {"statusCode": 200, "body": "OK"}
+            # Notionステータス更新
+            if notion_page_id:
+                log_info(ctx, action="update_notion", page_id=notion_page_id, status="対応済み")
+                notion.update_status(notion_page_id, "対応済み")
+
+            # 管理者メッセージ更新（完了表示）
+            if admin_channel_id and admin_message_ts:
+                log_info(ctx, action="update_admin_message", status="対応済み")
+                slack.chat_update(
+                    channel=admin_channel_id,
+                    ts=admin_message_ts,
+                    text="対応済み",
+                    blocks=[
+                        {"type": "section", "text": {"type": "mrkdwn", "text": "✅ *対応完了* （警告送信済み）"}}
+                    ]
+                )
+
+            return {"statusCode": 200, "body": "OK"}
+
+        elif action_id == "dismiss_violation":
+            # dismiss は「ユーザーへの返信はしない」＋ Notion status を dismiss に更新
+            if not notion_page_id:
+                log_info(ctx, action="missing_notion_page_id", result="stop")
+                return {"statusCode": 200, "body": "Missing notion_page_id"}
+
+            log_info(ctx, action="update_notion", page_id=notion_page_id, status="dismiss")
+            notion.update_status(notion_page_id, "dismiss")
+
+            # 管理者メッセージ更新（却下表示）
+            if admin_channel_id and admin_message_ts:
+                log_info(ctx, action="update_admin_message", status="dismiss")
+                slack.chat_update(
+                    channel=admin_channel_id,
+                    ts=admin_message_ts,
+                    text="dismiss",
+                    blocks=[
+                        {"type": "section", "text": {"type": "mrkdwn", "text": "🚫 *Dismissed* （対応不要）"}}
+                    ]
+                )
+
+            return {"statusCode": 200, "body": "OK"}
+
+
 
     except Exception as e:
         log_error(ctx, action="handler_failed", error=e)

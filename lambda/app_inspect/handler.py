@@ -117,13 +117,43 @@ def lambda_handler(event: dict, context: Any) -> dict:
             origin_ts=ev["ts"],
             reason=result.rationale,
         )
+        origin_channel = ev["channel"]
 
         blocks = [
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"🚨 *違反の可能性を検知*\n内容: {text[:50]}...\n理由: {result.rationale}"}},
-            {"type": "actions", "elements": [
-                {"type": "button", "text": {"type": "plain_text", "text": "削除勧告を送る"}, "style": "danger", "action_id": "approve_violation", "value": button_value}
-            ]}
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        "🚨 *違反の可能性を検知*\n"
+                        f"*チャンネル*: <#{origin_channel}>\n"
+                        f"*投稿*: <{post_link}|元投稿を開く>\n"
+                        f"*内容*: {text[:200]}\n"
+                        f"*理由*: {result.rationale}"
+                    ),
+                },
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "削除勧告を送る"},
+                        "style": "danger",
+                        "action_id": "approve_violation",
+                        "value": button_value,
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Dismiss（対応不要）"},
+                        "action_id": "dismiss_violation",
+                        "value": button_value,
+                    },
+                ],
+            },
         ]
+
+
 
         slack_client.chat_postMessage(channel=cfg.alert_private_channel_id, text="【違反検知アラート】", blocks=blocks)
         
