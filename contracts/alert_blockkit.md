@@ -13,7 +13,9 @@
 
 ## ボタン仕様（A -> B 契約）
 ### action_id（固定）
-- `approve_violation`
+
+- `approve_violation`(違反投稿として運営側に承認された)
+- `dismiss_violation`(違反投稿ではないとして運営側に承認された)
 
 ### value（固定：JSON文字列）
 - `lambda/contracts/alert_button_value.schema.json` に準拠

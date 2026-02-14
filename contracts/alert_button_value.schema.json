@@ -3,7 +3,7 @@
   "$id": "alert_button_value.schema.json",
   "title": "Slack Alert Button Value (A -> B contract)",
   "type": "object",
-  "required": ["trace_id", "origin_channel", "origin_ts"],
+  "required": ["trace_id", "origin_channel", "origin_ts","notion_page_id"],
   "properties": {
     "version": {
       "type": "string",
@@ -37,6 +37,10 @@
     "detected_at": {
       "type": "string",
       "description": "ISO timestamp when detected (optional)."
+    },
+    "notion_page_id": {
+      "type": "string",
+      "description": "ID of the Notion page created for this violation."
     }
   },
   "additionalProperties": true

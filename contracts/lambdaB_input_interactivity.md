@@ -16,8 +16,11 @@ API Gateway 経由で Slack から送られる Interactivity を受信。
 ---
 
 ## 処理対象のボタン
-- `actions[0].action_id == "approve_violation"` のときのみ処理する
-- それ以外は no-op（200返却）またはログのみ（方針は実装側）
+
+- `actions[0].action_id == "approve_violation"` 
+    - Notionステータスを`approve`に更新 & 警告返信
+- `actions[0].action_id == "dismiss_violation"`
+    - Notionステータスを`dismiss`に更新
 
 ---
 

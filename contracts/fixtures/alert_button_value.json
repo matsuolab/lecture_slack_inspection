@@ -4,5 +4,6 @@
   "origin_channel": "C_ORIGIN",
   "origin_ts": "1700000000.12345",
   "reason": "spam",
-  "policy_refs": ["p3-2"]
+  "policy_refs": ["p3-2"],
+  "notion_page_id": "abc123"
 }
