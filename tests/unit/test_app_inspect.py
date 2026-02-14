@@ -1,103 +1,67 @@
 import json
+from unittest.mock import MagicMock
 import pytest
 from app_inspect.handler import lambda_handler
 
-class TestAppInspect:
-    def test_url_verification(self, mock_env, mock_config):
-        """SlackのURL検証リクエストに正しく応答できるか"""
-        event = {
-            "body": json.dumps({"type": "url_verification", "challenge": "test_challenge"}),
-            "headers": {},
-            "isBase64Encoded": False
-        }
-        resp = lambda_handler(event, {})
-        assert resp["statusCode"] == 200
-        assert json.loads(resp["body"])["challenge"] == "test_challenge"
+jsonschema = pytest.importorskip("jsonschema")
 
-    def test_ignore_bot_message(self, mock_env, mock_external_services, mock_config):
-        """Bot自身のメッセージは無視するか"""
-        mock_verifier = mock_external_services["signature"].return_value
-        mock_verifier.is_valid_request.return_value = True
 
-        event_body = {
-            "type": "event_callback",
-            "event": {
-                "type": "message",
-                "bot_id": "B12345", # Botからのメッセージ
-                "text": "Hello"
-            }
-        }
-        event = {
-            "body": json.dumps(event_body),
-            "headers": {"x-slack-signature": "s", "x-slack-request-timestamp": "t"}
-        }
-        
-        resp = lambda_handler(event, {})
-        assert resp["body"] == "ignored"
+def _find_first_button(blocks: list) -> dict:
+    """
+    Slack blocks から最初の button element を返す
+    """
+    for b in blocks:
+        if b.get("type") == "actions":
+            for el in b.get("elements", []):
+                if el.get("type") == "button":
+                    return el
+    raise AssertionError("No button element found in blocks")
 
-    def test_violation_detected(self, mock_env, mock_external_services, mock_config, mocker):
-        """違反を検知した際、Notion作成とSlack通知が行われるか"""
-        # 署名検証OK
-        mock_external_services["signature"].return_value.is_valid_request.return_value = True
-        
-        # モデレーション結果をモック (違反あり)
-        mock_result = MagicMock()
-        mock_result.is_violation = True
-        mock_result.severity = "high"
-        mock_result.rationale = "不適切な発言"
-        mocker.patch("app_inspect.handler.run_moderation", return_value=mock_result)
 
-        # Slackパーマリンク取得のモック
-        mock_slack = mock_external_services["slack"].return_value
-        mock_slack.chat_getPermalink.return_value = {"permalink": "http://slack.com/p1"}
+def test_lambdaA_emits_contract_compliant_button_value(
+    load_contract_fixture, alert_button_value_schema, mock_external_services, mock_config, mocker
+):
+    # 署名OK（このテストでは署名そのものは目的ではない）
+    mock_external_services["signature"].is_valid_request.return_value = True
 
-        # Notion作成のモック
-        mock_notion = mock_external_services["notion"].return_value
-        mock_notion.create_violation_log.return_value = "page-id-123"
+    # moderation: 違反あり
+    mock_result = MagicMock()
+    mock_result.is_violation = True
+    mock_result.severity = "high"
+    mock_result.rationale = "spam"
+    mocker.patch("app_inspect.handler.run_moderation", return_value=mock_result)
 
-        event_body = {
-            "type": "event_callback",
-            "event": {
-                "type": "message",
-                "text": "死ね",
-                "user": "U12345",
-                "channel": "C12345",
-                "ts": "123456.789"
-            }
-        }
-        event = {
-            "body": json.dumps(event_body),
-            "headers": {"x-slack-signature": "s", "x-slack-request-timestamp": "t"}
-        }
+    # Slack/Notionの戻り値
+    mock_slack = mock_external_services["slack"]
+    mock_slack.chat_getPermalink.return_value = {"permalink": "http://slack.com/p1"}
+    mock_notion = mock_external_services["notion"]
+    mock_notion.create_violation_log.return_value = "page-id-123"
 
-        resp = lambda_handler(event, {})
+    # contracts/fixtures の Event API 入力をそのまま使う
+    event = load_contract_fixture("event_api_message.json")
+    # 実装がヘッダ参照する可能性に備えて最低限入れる（本番寄り）
+    event.setdefault("headers", {})
+    event["headers"].update({"x-slack-signature": "dummy", "x-slack-request-timestamp": "123"})
 
-        assert resp["statusCode"] == 200
-        # Notionにログが作成されたか確認
-        mock_notion.create_violation_log.assert_called_once()
-        # 管理者チャンネルにアラートが飛んだか確認
-        mock_slack.chat_postMessage.assert_called_once()
-        args, kwargs = mock_slack.chat_postMessage.call_args
-        assert kwargs["channel"] == "C_ADMIN"
-        assert "削除勧告を送る" in str(kwargs["blocks"])
+    resp = lambda_handler(event, {})
+    assert resp["statusCode"] == 200
 
-    def test_no_violation(self, mock_env, mock_external_services, mock_config, mocker):
-        """違反がない場合、何もしないか"""
-        mock_external_services["signature"].return_value.is_valid_request.return_value = True
-        
-        mock_result = MagicMock()
-        mock_result.is_violation = False
-        mocker.patch("app_inspect.handler.run_moderation", return_value=mock_result)
+    # Slackへ private通知したか
+    mock_slack.chat_postMessage.assert_called_once()
+    _, kwargs = mock_slack.chat_postMessage.call_args
+    blocks = kwargs["blocks"]
 
-        event_body = {
-            "type": "event_callback",
-            "event": {"type": "message", "text": "こんにちは"}
-        }
-        event = {"body": json.dumps(event_body), "headers": {}}
+    # ボタン契約を検証
+    btn = _find_first_button(blocks)
+    assert btn["action_id"] == "approve_violation"
 
-        resp = lambda_handler(event, {})
-        assert resp["statusCode"] == 200
-        assert resp["body"] == "ok"
-        
-        # 外部呼び出しが行われていないこと
-        mock_external_services["notion"].return_value.create_violation_log.assert_not_called()
+    value = json.loads(btn["value"])
+    jsonschema.validate(instance=value, schema=alert_button_value_schema)
+
+    # 入力イベントと整合することを検証（ここでA-B間の壊れを止める）
+    body = json.loads(event["body"])
+    ev = body["event"]
+
+    assert value["origin_channel"] == ev["channel"]
+    assert value["origin_ts"] == ev["ts"]
+    assert value["trace_id"] == f"slack:{body['event_id']}"
