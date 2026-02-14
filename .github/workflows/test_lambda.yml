@@ -1,0 +1,45 @@
+name: Lambda Logic Tests
+
+# トリガー設定: mainブランチへのPR、またはmainへのプッシュ時
+on:
+  pull_request:
+    branches:
+      - main
+      - develop  # 開発用ブランチがあれば追加
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest  # GitHubが用意するLinux環境を使用
+    
+    steps:
+      # 1. リポジトリのコードをチェックアウト
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Python環境のセットアップ (Lambdaのランタイムに合わせる、例: 3.12)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip" # 依存関係のインストールをキャッシュして高速化
+
+      # 3. 依存関係のインストール
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # テスト用ライブラリ
+          pip install pytest pytest-mock
+          # Lambdaのプロダクションコード用ライブラリ
+          if [ -f lambda/requirements.txt ]; then pip install -r lambda/requirements.txt; fi
+
+      # 4. テストの実行
+      - name: Run Tests
+        env:
+          # lambdaフォルダをモジュール検索パスに追加 (ここが重要！)
+          PYTHONPATH: ./lambda
+        run: |
+          # testsフォルダ以下のテストを実行
+          pytest tests/ -v
