@@ -1,36 +1,33 @@
 import json
 from openai import OpenAI
 from .models import ModerationResult, normalize_result
+from .violation_detector import ViolationDetector
+
+
+def _confidence_to_severity(confidence: float) -> str:
+    """確信度をseverityレベルに変換"""
+    if confidence >= 0.8:
+        return "high"
+    if confidence >= 0.5:
+        return "medium"
+    return "low"
+
 
 def run_moderation(client: OpenAI, model: str, guidelines: str, message_text: str) -> ModerationResult:
-    system_prompt = (
-        "あなたはSlack投稿のモデレーション判定器です。"
-        "出力は必ずJSONのみにしてください。"
-    )
-    user_prompt = (
-        f"【ガイドライン】\n{guidelines}\n\n"
-        f"【投稿】\n{message_text}\n\n"
-        "次のJSONスキーマで出力:\n"
-        "{\"is_violation\": bool, \"severity\": \"low|medium|high\", "
-        "\"categories\": [str], \"rationale\": str, \"recommended_reply\": str}"
-    )
-
+    """3段階違反検出: NGワード → RAG → LLM"""
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0,
-        )
-        content = response.choices[0].message.content
-        return normalize_result(json.loads(content))
+        detector = ViolationDetector(openai_client=client)
+        result = detector.detect(message_text)
+
+        return normalize_result({
+            "is_violation": result.is_violation,
+            "severity": _confidence_to_severity(result.confidence),
+            "categories": [result.category] if result.category else [],
+            "rationale": result.reason,
+            "recommended_reply": "",
+        })
     except Exception as e:
-        # エラー時は安全側に倒す（違反なし扱い、またはログ出力）
-        print(f"OpenAI error: {e}")
-        # 仮のエラー結果を返すなどの処理も可
+        print(f"Detection error: {e}")
         return normalize_result({"is_violation": False, "rationale": f"Error: {e}"})
 
 def encode_alert_button_value(notion_page_id: str | None, **kwargs) -> str:
