@@ -1,45 +1,48 @@
-name: Lambda Logic Tests
+name: pytest
 
-# トリガー設定: mainブランチへのPR、またはmainへのプッシュ時
 on:
   pull_request:
-    branches:
-      - main
-      - develop  # 開発用ブランチがあれば追加
   push:
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pytest-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    runs-on: ubuntu-latest  # GitHubが用意するLinux環境を使用
-    
+    runs-on: ubuntu-latest
+
     steps:
-      # 1. リポジトリのコードをチェックアウト
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Python環境のセットアップ (Lambdaのランタイムに合わせる、例: 3.12)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: "pip" # 依存関係のインストールをキャッシュして高速化
+          python-version: "3.13"
+          cache: "pip"
 
-      # 3. 依存関係のインストール
       - name: Install dependencies
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          # テスト用ライブラリ
-          pip install pytest pytest-mock
-          # Lambdaのプロダクションコード用ライブラリ
-          if [ -f lambda/requirements.txt ]; then pip install -r lambda/requirements.txt; fi
+          python -m pip install -U pip
 
-      # 4. テストの実行
-      - name: Run Tests
-        env:
-          # lambdaフォルダをモジュール検索パスに追加 (ここが重要！)
-          PYTHONPATH: ./lambda
+          # Project deps (if you have them)
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          fi
+          if [ -f requirements-dev.txt ]; then
+            python -m pip install -r requirements-dev.txt
+          fi
+
+          # Ensure test deps exist even if requirements files are missing/incomplete
+          python -m pip install -U pytest pytest-mock jsonschema
+
+      - name: Run tests
+        shell: bash
         run: |
-          # testsフォルダ以下のテストを実行
           pytest tests/ -v
