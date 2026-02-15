@@ -21,6 +21,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
     log_info(ctx, action="request_received")
 
     try:
+        # 1.5 Slackリトライ検出（3秒タイムアウト時の再送を即返却）
+        raw_headers = event.get("headers") or {}
+        lower_headers = {k.lower(): v for k, v in raw_headers.items()}
+        if lower_headers.get("x-slack-retry-num"):
+            log_info(ctx, action="retry_skip", retry_num=lower_headers["x-slack-retry-num"])
+            return {"statusCode": 200, "body": "ok"}
+
         # 設定のロード
         cfg = load_config()
 
