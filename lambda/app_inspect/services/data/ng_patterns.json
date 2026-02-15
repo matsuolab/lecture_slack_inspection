@@ -1,0 +1,243 @@
+{
+  "metadata": {
+    "description": "NGワードマッチング用パターンリスト",
+    "source": "exp3_ngword_matching.pyから抽出・整理",
+    "updated": "2026-02-14"
+  },
+  "patterns": [
+    {
+      "article_id": "11-iv",
+      "category": "SNS共有禁止",
+      "pattern": "(Twitter|ツイッター|X|インスタ|Instagram|Facebook|FB|TikTok|YouTube).*(載せ|アップ|投稿|共有|シェア|晒)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-iv",
+      "category": "SNS共有禁止",
+      "pattern": "(載せ|アップ|投稿|共有|シェア|晒).*(Twitter|ツイッター|X|インスタ|Instagram|Facebook|FB|TikTok|YouTube)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-iv",
+      "category": "SNS共有禁止",
+      "pattern": "SNS.*(アップ|投稿|共有|シェア)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-iv",
+      "category": "SNS共有禁止",
+      "pattern": "スクショ.*(SNS|Twitter|X|インスタ)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-iv",
+      "category": "SNS共有禁止",
+      "pattern": "(Twitter|X)で.*(まとめ|スレッド|ツイート)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-iv",
+      "category": "SNS共有禁止",
+      "pattern": "(講義|講座|内容).*(Twitter|X)で",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-v",
+      "category": "勧誘行為",
+      "pattern": "(副業|稼げる|儲か|月収|年収).*(教え|方法|DM|連絡)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-v",
+      "category": "勧誘行為",
+      "pattern": "(投資|FX|仮想通貨|暗号資産).*(案件|儲|稼)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-v",
+      "category": "勧誘行為",
+      "pattern": "ネットワークビジネス",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-v",
+      "category": "勧誘行為",
+      "pattern": "(MLM|マルチ).*(勧誘|紹介)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-v",
+      "category": "勧誘行為",
+      "pattern": "簡単に.*(稼|儲)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-v",
+      "category": "勧誘行為",
+      "pattern": "DM.*(待|ください|下さい)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-vi",
+      "category": "録画共有禁止",
+      "pattern": "(録画|動画).*(共有|シェア|あげ|配布)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-vi",
+      "category": "録画共有禁止",
+      "pattern": "(Zoom|ズーム|講義|講座).*(録画|動画)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-vi",
+      "category": "録画共有禁止",
+      "pattern": "録画.*(持って|ありま|ください)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "edu-6",
+      "category": "コンテンツ無断配布",
+      "pattern": "(資料|教材|PDF|スライド).*(メルカリ|ヤフオク|売|転売)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "edu-6",
+      "category": "コンテンツ無断配布",
+      "pattern": "(メルカリ|ヤフオク).*(資料|教材|売)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "edu-6",
+      "category": "コンテンツ無断配布",
+      "pattern": "(資料|教材).*(友達|他人|第三者).*(シェア|共有|あげ|渡)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "edu-6",
+      "category": "コンテンツ無断配布",
+      "pattern": "(Googleドライブ|Google Drive|ドライブ).*(まとめ|共有|URL)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "edu-6",
+      "category": "コンテンツ無断配布",
+      "pattern": "(講座|講義).*(資料|教材).*(共有|シェア|配布)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-ix",
+      "category": "個人情報収集",
+      "pattern": "(連絡先|住所|電話番号|メアド|LINE).*(教えて|集め|リスト|名簿)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-ix",
+      "category": "個人情報収集",
+      "pattern": "(名簿|リスト).*(作|連絡先)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-ix",
+      "category": "個人情報収集",
+      "pattern": "皆さんの.*(情報|連絡先|本名)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-xi",
+      "category": "迷惑行為",
+      "pattern": "(うざい|きもい|キモい|死ね|消えろ|消えて|バカ|アホ|クズ)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-xi",
+      "category": "迷惑行為",
+      "pattern": "(お前|あいつ|こいつ).*(うざ|きも|むかつ)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-xii",
+      "category": "なりすまし",
+      "pattern": "(私|俺|僕)は.*(メンター|運営|スタッフ|管理者)の",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-xii",
+      "category": "なりすまし",
+      "pattern": "(メンター|運営|スタッフ)を名乗",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-xiii",
+      "category": "無許可宣伝",
+      "pattern": "(私の|僕の|俺の).*(ブログ|サイト|チャンネル|サービス).*(見て|登録|フォロー)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "11-xiii",
+      "category": "無許可宣伝",
+      "pattern": "アフィリエイト.*(リンク|URL)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "course-drive-url",
+      "category": "ドライブURL共有禁止",
+      "pattern": "(ドライブ|Drive).*(URL|リンク|共有)",
+      "courses": ["DL", "LLM"]
+    },
+    {
+      "article_id": "course-guide-sharing",
+      "category": "手引き共有禁止",
+      "pattern": "(手引き|受講ガイド).*(URL|共有|貼)",
+      "courses": ["DL", "LLM"]
+    },
+    {
+      "article_id": "edu-8-iii",
+      "category": "コンテンツ営利利用",
+      "pattern": "(教材|資料|講座).*(営利|商用|有料|セミナー)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "edu-8-iii",
+      "category": "コンテンツ営利利用",
+      "pattern": "(教材|資料|講座の内容).*(販売|売る|売り)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "course-8-ii",
+      "category": "講座内容無断提供",
+      "pattern": "(課題|講座|講義).*(答え|内容).*(外部|第三者|友達).*(教え|提供|漏)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "course-8-ii",
+      "category": "講座内容無断提供",
+      "pattern": "(講座|講義).*(内容|課題).*(ブログ|note|Qiita|Zenn).*(書|公開|投稿)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "course-8-iv",
+      "category": "不正受講",
+      "pattern": "(課題|受講|試験).*(代行|代理|代わり|代筆)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "course-8-iv",
+      "category": "不正受講",
+      "pattern": "(代わり|代理).*(受講|課題|提出)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "reg-3",
+      "category": "アカウント譲渡・貸与",
+      "pattern": "アカウント.*(貸|譲|あげ|共有|シェア)",
+      "courses": ["ALL"]
+    },
+    {
+      "article_id": "reg-3",
+      "category": "アカウント譲渡・貸与",
+      "pattern": "(ログイン|パスワード).*(教え|共有|シェア|貸)",
+      "courses": ["ALL"]
+    }
+  ]
+}

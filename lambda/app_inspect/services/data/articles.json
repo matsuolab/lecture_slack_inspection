@@ -1,0 +1,235 @@
+{
+  "metadata": {
+    "description": "違反検出用の重要条文リスト",
+    "source": "松尾・岩澤研究室の各種規約から禁止事項を抽出",
+    "regulations": [
+      "AI Community参加規約",
+      "教育コンテンツ利用規約",
+      "講座受講規約",
+      "講座受講用アカウント登録規約"
+    ],
+    "updated": "2026-02-14"
+  },
+  "articles": [
+    {
+      "id": "11-i",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(i)",
+      "category": "法令違反",
+      "content": "法令または公序良俗に違反する行為",
+      "keywords": ["違法", "犯罪", "公序良俗"],
+      "examples": ["違法ダウンロード", "詐欺", "差別発言"]
+    },
+    {
+      "id": "11-ii",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(ii)",
+      "category": "犯罪関連",
+      "content": "犯罪行為に関連する行為",
+      "keywords": ["犯罪", "違法"],
+      "examples": ["ハッキング方法の共有", "詐欺への誘導"]
+    },
+    {
+      "id": "11-iii",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(iii)",
+      "category": "システム妨害",
+      "content": "当研究室、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為",
+      "keywords": ["サーバー", "ネットワーク", "妨害", "攻撃"],
+      "examples": ["DDoS攻撃", "サーバー負荷攻撃"]
+    },
+    {
+      "id": "11-iv",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(iv)",
+      "category": "SNS共有禁止",
+      "content": "slack上でのやり取りやスクリーンショットを、SNS上にアップするといった行為",
+      "keywords": ["SNS", "Twitter", "X", "インスタ", "Facebook", "スクショ", "スクリーンショット", "アップ", "投稿", "載せる"],
+      "examples": ["このスレッド面白いからTwitterに載せよう", "Slack晒してやる"]
+    },
+    {
+      "id": "11-v",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(v)",
+      "category": "勧誘行為",
+      "content": "ネットワークビジネス、宗教等の勧誘行為",
+      "keywords": ["勧誘", "ネットワークビジネス", "MLM", "宗教", "副業", "稼げる", "儲かる", "投資"],
+      "examples": ["副業で稼げる方法教えます、DM待ってます", "簡単に儲かる投資案件あります"]
+    },
+    {
+      "id": "11-vi",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(vi)",
+      "category": "録画共有禁止",
+      "content": "講義の録画を無断で共有する行為",
+      "keywords": ["録画", "共有", "シェア", "Zoom", "動画", "配布"],
+      "examples": ["Zoomの録画共有します！", "講義動画持ってる人いますか？"]
+    },
+    {
+      "id": "11-vii",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(vii)",
+      "category": "運営妨害",
+      "content": "当研究室のサービスの運営を妨害するおそれのある行為",
+      "keywords": ["妨害", "荒らし", "スパム"],
+      "examples": ["運営批判の連続投稿", "大量のスパムメッセージ"]
+    },
+    {
+      "id": "11-viii",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(viii)",
+      "category": "不正アクセス",
+      "content": "不正アクセスをし、またはこれを試みる行為",
+      "keywords": ["不正アクセス", "ハッキング", "クラッキング"],
+      "examples": ["管理者権限の不正取得", "他人のアカウントへのログイン試行"]
+    },
+    {
+      "id": "11-ix",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(ix)",
+      "category": "個人情報収集",
+      "content": "他のユーザーに関する個人情報等を収集または蓄積する行為",
+      "keywords": ["個人情報", "収集", "蓄積", "連絡先", "住所", "電話番号"],
+      "examples": ["参加者の連絡先リスト作りました", "皆さんの本名教えてください"]
+    },
+    {
+      "id": "11-x",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(x)",
+      "category": "不正利用",
+      "content": "不正な目的を持って本サービスを利用する行為",
+      "keywords": ["不正", "悪用"],
+      "examples": ["競合他社のスパイ活動", "講座内容の転売目的"]
+    },
+    {
+      "id": "11-xi",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(xi)",
+      "category": "迷惑行為",
+      "content": "本サービスの他のユーザーまたはその他の第三者に不利益、損害、不快感を与える行為",
+      "keywords": ["迷惑", "不快", "嫌がらせ", "ハラスメント", "誹謗中傷"],
+      "examples": ["人格攻撃", "しつこい嫌がらせ", "差別的発言"]
+    },
+    {
+      "id": "11-xii",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(xii)",
+      "category": "なりすまし",
+      "content": "他のユーザーに成りすます行為",
+      "keywords": ["なりすまし", "偽装", "詐称"],
+      "examples": ["メンターを装った投稿", "運営スタッフのふりをする"]
+    },
+    {
+      "id": "11-xiii",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(xiii)",
+      "category": "無許可宣伝",
+      "content": "当研究室が許諾しない本サービス上での宣伝、広告、勧誘、または営業行為",
+      "keywords": ["宣伝", "広告", "営業", "PR", "アフィリエイト"],
+      "examples": ["自社サービスの宣伝", "アフィリエイトリンクの共有"]
+    },
+    {
+      "id": "11-xiv",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(xiv)",
+      "category": "出会い目的",
+      "content": "面識のない異性との出会いを目的とした行為",
+      "keywords": ["出会い", "デート", "恋愛"],
+      "examples": ["彼女募集中です", "飲みに行きませんか？（異性限定）"]
+    },
+    {
+      "id": "11-xv",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(xv)",
+      "category": "反社関連",
+      "content": "当研究室のサービスに関連して、反社会的勢力に対して直接または間接に利益を供与する行為",
+      "keywords": ["反社", "暴力団"],
+      "examples": []
+    },
+    {
+      "id": "11-xvi",
+      "regulation": "AI Community参加規約",
+      "article": "AI Community参加規約 第11条(xvi)",
+      "category": "その他不適切",
+      "content": "その他、当研究室が不適切と判断する行為",
+      "keywords": [],
+      "examples": []
+    },
+    {
+      "id": "edu-6",
+      "regulation": "教育コンテンツ利用規約",
+      "article": "教育コンテンツ利用規約 第6条",
+      "category": "コンテンツ無断配布",
+      "content": "本教育コンテンツを第三者への提供・譲渡・貸与・公開・複製・頒布・翻案等をしてはなりません",
+      "keywords": ["資料", "教材", "コンテンツ", "共有", "配布", "メルカリ", "ヤフオク", "転売", "売る"],
+      "examples": ["この講座の資料、メルカリで売ったら儲かりそうw", "教材PDFあげます"]
+    },
+    {
+      "id": "edu-8-iii",
+      "regulation": "教育コンテンツ利用規約",
+      "article": "教育コンテンツ利用規約 第8条(iii)",
+      "category": "コンテンツ営利利用",
+      "content": "本教育コンテンツを営利目的で使用する行為",
+      "keywords": ["営利", "商用", "ビジネス", "転売", "販売", "有料", "セミナー", "売る"],
+      "examples": ["講座の内容で有料セミナーやります", "教材を転売して稼ごう"]
+    },
+    {
+      "id": "course-6",
+      "regulation": "講座受講規約",
+      "article": "講座受講規約 第6条",
+      "category": "録画・スクショ禁止",
+      "content": "ユーザーは、講座の録画・スクリーンショットを無断で行い、第三者に共有してはなりません",
+      "keywords": ["録画", "スクリーンショット", "スクショ", "キャプチャ"],
+      "examples": ["講義のスクショ撮っておきました", "画面録画したので共有します"]
+    },
+    {
+      "id": "course-8-ii",
+      "regulation": "講座受講規約",
+      "article": "講座受講規約 第8条(ii)",
+      "category": "講座内容無断提供",
+      "content": "講座内容の第三者への無断提供",
+      "keywords": ["講座内容", "教える", "外部", "提供", "漏らす", "答え", "ブログ"],
+      "examples": ["この課題の答え外部の人に教えてあげた", "講座の内容をブログに書きました"]
+    },
+    {
+      "id": "course-8-iv",
+      "regulation": "講座受講規約",
+      "article": "講座受講規約 第8条(iv)",
+      "category": "不正受講",
+      "content": "不正な手段による受講",
+      "keywords": ["代理", "代わり", "不正", "カンニング", "代筆", "代行"],
+      "examples": ["課題を代わりにやってもらった", "他人に受講させている"]
+    },
+    {
+      "id": "reg-3",
+      "regulation": "講座受講用アカウント登録規約",
+      "article": "講座受講用アカウント登録規約 第3条",
+      "category": "アカウント譲渡・貸与",
+      "content": "アカウント情報を第三者に利用させ、または譲渡・貸与してはなりません",
+      "keywords": ["アカウント", "ログイン", "パスワード", "貸す", "譲る", "共有"],
+      "examples": ["アカウント貸してあげるよ", "ログイン情報共有します"]
+    },
+    {
+      "id": "course-drive-url",
+      "regulation": "講座別ルール",
+      "article": "講座別ルール（DL/LLM講座）",
+      "category": "ドライブURL共有禁止",
+      "content": "GoogleドライブのURLを共有する行為（DL/LLM講座で禁止、GCIは許可）",
+      "keywords": ["ドライブ", "drive", "Drive", "Google", "URL", "リンク"],
+      "examples": ["ここにドライブのリンク貼っておきます", "Google Driveで共有しました"],
+      "applies_to": ["DL", "LLM"],
+      "excludes": ["GCI"]
+    },
+    {
+      "id": "course-guide-sharing",
+      "regulation": "講座別ルール",
+      "article": "講座別ルール（DL/LLM講座）",
+      "category": "受講手引き共有禁止",
+      "content": "受講手引きのURLやスクリーンショットを共有する行為（DL/LLM講座で禁止、GCIは許可）",
+      "keywords": ["手引き", "受講ガイド", "手順書", "ガイド"],
+      "examples": ["受講手引きのスクショ貼ります", "ガイドのURL共有しますね"],
+      "applies_to": ["DL", "LLM"],
+      "excludes": ["GCI"]
+    }
+  ]
+}
