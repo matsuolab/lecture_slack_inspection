@@ -62,7 +62,7 @@ def test_lambdaB_handles_fixture_interactivity_dismiss_updates_notion_and_no_rep
 
     # 2) Notion status を dismiss に更新する
     value = json.loads(payload["actions"][0]["value"])
-    mock_notion.update_status.assert_called_with(value["notion_page_id"], "dismiss")
+    mock_notion.update_status.assert_called_with(value["notion_page_id"], "Dismissed")
 
     # 3) 管理者側メッセージ更新するなら（実装している場合だけ）
     # mock_slack.chat_update.assert_called_once()

@@ -11,6 +11,10 @@ class ModerationResult:
     rationale: str
     recommended_reply: str
 
+    #追加のフィールドがあればここに追加
+    confidence: float = 0.0  # 例: モデルの信頼度スコア
+    article_id: str | None = None  # 例: 対象となる記事のID
+
 def normalize_result(raw: dict) -> ModerationResult:
     is_violation = bool(raw.get("is_violation", False))
     severity = str(raw.get("severity", "low")).lower()
@@ -30,6 +34,8 @@ def normalize_result(raw: dict) -> ModerationResult:
         categories=categories,
         rationale=rationale,
         recommended_reply=recommended_reply,
+        confidence=raw.get("confidence", 0.0),
+        article_id=raw.get("article_id"),
     )
 
 def severity_rank(sev: Severity) -> int:

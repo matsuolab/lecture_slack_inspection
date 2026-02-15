@@ -88,4 +88,4 @@ def test_A_to_B_flow_dismiss_updates_notion(
 
     # 5) Notion status を dismiss に更新する
     # ※メソッド名はあなたの実装に合わせて変更してください
-    mock_notion.update_status.assert_called_with(value_from_A["notion_page_id"], "dismiss")
+    mock_notion.update_status.assert_called_with(value_from_A["notion_page_id"], "Dismissed")

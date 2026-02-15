@@ -95,16 +95,16 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
             # Notionステータス更新
             if notion_page_id:
-                log_info(ctx, action="update_notion", page_id=notion_page_id, status="対応済み")
-                notion.update_status(notion_page_id, "対応済み")
+                log_info(ctx, action="update_notion", page_id=notion_page_id, status="Approved")
+                notion.update_status(notion_page_id, "Approved")
 
             # 管理者メッセージ更新（完了表示）
             if admin_channel_id and admin_message_ts:
-                log_info(ctx, action="update_admin_message", status="対応済み")
+                log_info(ctx, action="update_admin_message", status="Approved")
                 slack.chat_update(
                     channel=admin_channel_id,
                     ts=admin_message_ts,
-                    text="対応済み",
+                    text="Approved",
                     blocks=[
                         {"type": "section", "text": {"type": "mrkdwn", "text": "✅ *対応完了* （警告送信済み）"}}
                     ]
@@ -118,16 +118,16 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 log_info(ctx, action="missing_notion_page_id", result="stop")
                 return {"statusCode": 200, "body": "Missing notion_page_id"}
 
-            log_info(ctx, action="update_notion", page_id=notion_page_id, status="dismiss")
-            notion.update_status(notion_page_id, "dismiss")
+            log_info(ctx, action="update_notion", page_id=notion_page_id, status="Dismissed")
+            notion.update_status(notion_page_id, "Dismissed")
 
             # 管理者メッセージ更新（却下表示）
             if admin_channel_id and admin_message_ts:
-                log_info(ctx, action="update_admin_message", status="dismiss")
+                log_info(ctx, action="update_admin_message", status="Dismissed")
                 slack.chat_update(
                     channel=admin_channel_id,
                     ts=admin_message_ts,
-                    text="dismiss",
+                    text="Dismissed",
                     blocks=[
                         {"type": "section", "text": {"type": "mrkdwn", "text": "🚫 *Dismissed* （対応不要）"}}
                     ]
