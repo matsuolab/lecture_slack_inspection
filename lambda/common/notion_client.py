@@ -21,6 +21,8 @@ class NotionClient:
         method: str,
         reason: str = None,
         post_link: str = None,
+        article_id: str = None,
+        confidence: float = None,
     ) -> Optional[str]:
         """違反ログを作成し、Page IDを返す"""
         if not self.db_id:
@@ -36,12 +38,18 @@ class NotionClient:
             "検出日時": {"date": {"start": datetime.now().isoformat()}},
             "判定結果": {"select": {"name": result}},
             "検出方法": {"select": {"name": method}},
-            "対応ステータス": {"select": {"name": "未対応"}},
+            "対応ステータス": {"select": {"name": "Unprocessed"}},
         }
 
         if post_link:
             props["投稿リンク"] = {"url": post_link}
+
+        if article_id:
+            props["該当条文"] = {"rich_text": [{"text": {"content": article_id}}]}
         
+        if confidence is not None:
+            props["信頼度"] = {"number": confidence}
+
         # 理由を投稿者欄に追記（Notionのプロパティ構成に合わせて調整可）
         if reason:
             props["投稿者"]["rich_text"].append({"text": {"content": f" | 理由: {reason[:100]}"}})

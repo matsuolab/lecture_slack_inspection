@@ -25,6 +25,8 @@ def run_moderation(client: OpenAI, model: str, guidelines: str, message_text: st
             "categories": [result.category] if result.category else [],
             "rationale": result.reason,
             "recommended_reply": "",
+            "confidence": result.confidence,
+            "article_id": result.article_id,
         })
     except Exception as e:
         print(f"Detection error: {e}")

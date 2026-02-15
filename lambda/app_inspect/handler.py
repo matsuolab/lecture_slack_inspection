@@ -81,7 +81,9 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 severity="medium",
                 categories=["mock_test"],
                 rationale="[MOCK] 違反ワード検知",
-                recommended_reply="[MOCK] 削除を推奨します"
+                recommended_reply="[MOCK] 削除を推奨します",
+                confidence=0.9,
+                article_id="mock_article_123"
             )
         else:
             openai_client = OpenAI(api_key=cfg.openai_api_key)
@@ -109,7 +111,9 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 result="Violation",
                 method="OpenAI",
                 reason=result.rationale,
-                post_link=post_link
+                post_link=post_link,
+                article_id=result.article_id,
+                confidence=result.confidence,
             )
             log_info(ctx, action="notion_page_created", page_id=notion_page_id)
         except Exception as e:

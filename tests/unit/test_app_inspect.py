@@ -29,6 +29,9 @@ def test_lambdaA_emits_contract_compliant_button_value(
     mock_result.is_violation = True
     mock_result.severity = "high"
     mock_result.rationale = "spam"
+
+    mock_result.confidence = 0.9
+    mock_result.article_id = "A-123"
     mocker.patch("app_inspect.handler.run_moderation", return_value=mock_result)
 
     # Slack/Notionの戻り値
@@ -50,6 +53,13 @@ def test_lambdaA_emits_contract_compliant_button_value(
     mock_slack.chat_postMessage.assert_called_once()
     _, kwargs = mock_slack.chat_postMessage.call_args
     blocks = kwargs["blocks"]
+
+    mock_notion.create_violation_log.assert_called_once()
+    call_kwargs = mock_notion.create_violation_log.call_args.kwargs
+    
+    assert call_kwargs["confidence"] == 0.9
+    assert call_kwargs["article_id"] == "A-123"
+    assert call_kwargs["post_content"] is not None
 
     # ボタン契約を検証
     btn = _find_first_button(blocks)
