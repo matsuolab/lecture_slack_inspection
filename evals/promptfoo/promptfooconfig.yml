@@ -1,0 +1,18 @@
+description: slack inspection - step3 LLM judge eval
+
+providers:
+  - id: openai:chat:gpt-4o-mini
+    config:
+      temperature: 0
+      response_format: file://lambda/app_inspect/services/data/prompts/judge_violation.response_format.json
+
+prompts:
+  - label: judge_violation
+    file: file://lambda/app_inspect/services/data/prompts/judge_violation.njk
+
+defaultTest:
+  options:
+    transform: JSON.parse(output)
+
+tests:
+  - file://evals/promptfoo/testcases.yaml

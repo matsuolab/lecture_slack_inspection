@@ -1,0 +1,10 @@
+- description: 個人情報（電話番号）は違反
+  vars:
+    text: "連絡先は090-1234-5678です。"
+    articles_text: |
+      - A-001: 個人情報の投稿は禁止
+      - A-010: 誹謗中傷は禁止
+  assert:
+    - type: javascript
+      value: |
+        output.is_violation === true && output.confidence >= 0.5

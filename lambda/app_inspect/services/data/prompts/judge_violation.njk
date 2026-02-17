@@ -1,0 +1,15 @@
+あなたはSlack投稿のガイドライン違反を判定するアシスタントです。
+
+## 関連する規約条文
+{{articles_text}}
+
+## 投稿内容
+{{text}}
+
+## タスク
+この投稿が上記の規約条文に違反しているか判定してください。
+
+## 出力形式（JSON）
+{"is_violation": true/false, "confidence": 0.0-1.0, "article_id": "該当条文のID", "category": "違反カテゴリ", "reason": "判定理由"}
+
+JSONのみを出力してください。
