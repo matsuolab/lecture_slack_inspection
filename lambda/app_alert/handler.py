@@ -77,7 +77,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             )
 
         elif action_ctx.action_id == "dismiss_violation":
-            log_info(ctx, action="exec_dismiss", page_id=action_ctx.notion_page_id)
+            log_info(ctx, action="exec_dismiss", page_id=action_ctx.value.get("notion_page_id"))
             success = handle_dismiss_violation(
                 ctx=action_ctx, 
                 slack=slack, 
