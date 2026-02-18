@@ -1,7 +1,6 @@
 import json
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
-from .slack_webapi import SlackWebClient
 
 @dataclass(frozen=True)
 class ActionContext:
