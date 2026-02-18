@@ -9,7 +9,7 @@ from slack_sdk.signature import SignatureVerifier
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
 from .services.config import load_config
-from .actions import parse_action_context, handle_approve_violation, handle_dismiss_violation
+from .services.actions import parse_action_context, handle_approve_violation, handle_dismiss_violation
 
 SERVICE = "app_alert"
 
