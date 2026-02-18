@@ -1,6 +1,10 @@
 import json
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
+import logging
+
+from slack_sdk import WebClient as SlackWebClient
+
 
 @dataclass(frozen=True)
 class ActionContext:
@@ -37,23 +41,33 @@ def handle_approve(slack: SlackWebClient, ctx: ActionContext, reply_text: str) -
     if not origin_channel or not origin_ts:
         return
 
-    slack.post_message(channel=origin_channel, thread_ts=origin_ts, text=reply_text)
+    try:
+        if hasattr(slack, "post_message"):
+            slack.post_message(channel=origin_channel, thread_ts=origin_ts, text=reply_text)
+        else:
+            # slack_sdk公式に合わせるならこちら
+            slack.chat_postMessage(channel=origin_channel, thread_ts=origin_ts, text=reply_text)
+    except Exception:
+        pass
 
     if ctx.admin_channel and ctx.admin_message_ts:
         done_blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "✅ 対応しました（スレッドに削除勧告を送信済み）"}}]
         try:
-            slack.update_message(channel=ctx.admin_channel, ts=ctx.admin_message_ts, text="対応済み", blocks=done_blocks)
+            # 公式SDKなら chat_update
+            if hasattr(slack, "update_message"):
+                slack.update_message(channel=ctx.admin_channel, ts=ctx.admin_message_ts, text="対応済み", blocks=done_blocks)
+            else:
+                slack.chat_update(channel=ctx.admin_channel, ts=ctx.admin_message_ts, text="対応済み", blocks=done_blocks)
         except Exception:
             pass
 
-# ---------------------------------------------------------------------------
-# 以下が変更部分
-# ---------------------------------------------------------------------------
+# ----------------------以下、変更部分-------------------
+
 
 if TYPE_CHECKING:
     from slack_sdk import WebClient
     from common.notion_client import NotionClient
-import logging
+
 logger = logging.getLogger()
 
 def handle_approve_violation(
@@ -62,7 +76,9 @@ def handle_approve_violation(
     notion: "NotionClient", 
     reply_text: str
 ) -> bool:
-
+    """
+    【追記】handler.pyから移植した承認ロジック
+    """
     origin_channel = ctx.value.get("origin_channel")
     origin_ts = ctx.value.get("origin_ts")
     notion_page_id = ctx.value.get("notion_page_id")
