@@ -41,6 +41,10 @@
     "notion_page_id": {
       "type": "string",
       "description": "ID of the Notion page created for this violation."
+    },
+    "article_id": {
+      "type": "string",
+      "description": "Article name/ID of the violated regulation (optional)."
     }
   },
   "additionalProperties": true

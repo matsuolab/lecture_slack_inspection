@@ -98,6 +98,7 @@ def mock_external_services(mocker):
     mock_slack_client = mocker.MagicMock()
     mock_openai_client = mocker.MagicMock()
     mock_notion_client = mocker.MagicMock()
+    mock_notion_client.check_duplicate_violation.return_value = False
 
     mocker.patch("app_inspect.handler.SignatureVerifier", return_value=mock_verifier)
     mocker.patch("app_alert.handler.SignatureVerifier", return_value=mock_verifier)

@@ -46,7 +46,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         # 2. コンテキスト解析
         action_ctx = parse_action_context(payload)
-        
+
+        # 対応者（ボタン押下者）
+        responder_id = None
+        user_info = payload.get("user")
+        if isinstance(user_info, dict):
+            responder_id = user_info.get("id")
+
         if not action_ctx or not action_ctx.action_id:
             log_info(ctx, action="ignore_action", reason="no_action_id")
             return {"statusCode": 200, "body": "OK"}
@@ -64,23 +70,24 @@ def lambda_handler(event: dict, context: Any) -> dict:
         page_id = action_ctx.value.get("notion_page_id")
 
         if action_ctx.action_id == "approve_violation":
-            # ここで action_ctx.notion_page_id を使うとエラーになります
             log_info(ctx, action="exec_approve", page_id=page_id)
             
             success = handle_approve_violation(
-                ctx=action_ctx, 
-                slack=slack, 
-                notion=notion, 
-                reply_text=cfg.reply_prefix
+                ctx=action_ctx,
+                slack=slack,
+                notion=notion,
+                reply_text=cfg.reply_prefix,
+                responder_id=responder_id,
             )
 
         elif action_ctx.action_id == "dismiss_violation":
             log_info(ctx, action="exec_dismiss", page_id=page_id)
-            
+
             success = handle_dismiss_violation(
-                ctx=action_ctx, 
-                slack=slack, 
-                notion=notion
+                ctx=action_ctx,
+                slack=slack,
+                notion=notion,
+                responder_id=responder_id,
             )
 
         if success:

@@ -99,7 +99,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
         try:
             notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
             slack_client = WebClient(token=cfg.slack_bot_token)
-        
+
+            # 重複チェック（同じ投稿の二重処理防止）
+            if notion.check_duplicate_violation(ev["ts"]):
+                log_info(ctx, action="duplicate_skip", message_ts=ev["ts"])
+                return {"statusCode": 200, "body": "duplicate"}
+
             # 投稿リンク
             permalink_resp = slack_client.chat_getPermalink(channel=ev["channel"], message_ts=ev["ts"])
             post_link = permalink_resp.get("permalink")
@@ -114,19 +119,21 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 post_link=post_link,
                 article_id=result.article_id,
                 confidence=result.confidence,
+                message_ts=ev["ts"],
             )
             log_info(ctx, action="notion_page_created", page_id=notion_page_id)
         except Exception as e:
             log_error(ctx, action="external_service_call", error=e)
             notion_page_id = None
 
-        # ボタンに現在の trace_id を埋め込む（管理者がボタンを押した時に追跡できるようにするため）
+        # アラートボタンに埋め込むペイロード
         button_value = encode_alert_button_value(
             notion_page_id=notion_page_id,
             trace_id=ctx.trace_id,
             origin_channel=ev["channel"],
             origin_ts=ev["ts"],
             reason=result.rationale,
+            article_id=result.article_id,
         )
         origin_channel = ev["channel"]
 
@@ -164,13 +171,11 @@ def lambda_handler(event: dict, context: Any) -> dict:
             },
         ]
 
-
-
         slack_client.chat_postMessage(channel=cfg.alert_private_channel_id, text="【違反検知アラート】", blocks=blocks)
-        
+
         log_info(ctx, action="alert_sent", result="success", page_id=notion_page_id)
         emit_metric(ctx, "TotalLatencyMs", total_timer.ms(), unit="Milliseconds")
-        
+
         return {"statusCode": 200, "body": "ok"}
 
     except Exception as e:
