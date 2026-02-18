@@ -2,7 +2,6 @@ import json
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 import logging
-
 from slack_sdk import WebClient as SlackWebClient
 
 
@@ -14,8 +13,12 @@ class ActionContext:
     admin_message_ts: str | None
 
 def parse_action_context(payload: dict) -> ActionContext | None:
-    if payload.get("type") != "block_actions":
+    
+    # 新しいコード: typeが存在する場合のみチェックし、ない場合はスルーする
+    payload_type = payload.get("type")
+    if payload_type is not None and payload_type != "block_actions":
         return None
+
     actions = payload.get("actions") or []
     if not actions:
         return None
@@ -45,7 +48,6 @@ def handle_approve(slack: SlackWebClient, ctx: ActionContext, reply_text: str) -
         if hasattr(slack, "post_message"):
             slack.post_message(channel=origin_channel, thread_ts=origin_ts, text=reply_text)
         else:
-            # slack_sdk公式に合わせるならこちら
             slack.chat_postMessage(channel=origin_channel, thread_ts=origin_ts, text=reply_text)
     except Exception:
         pass
@@ -53,15 +55,12 @@ def handle_approve(slack: SlackWebClient, ctx: ActionContext, reply_text: str) -
     if ctx.admin_channel and ctx.admin_message_ts:
         done_blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "✅ 対応しました（スレッドに削除勧告を送信済み）"}}]
         try:
-            # 公式SDKなら chat_update
             if hasattr(slack, "update_message"):
                 slack.update_message(channel=ctx.admin_channel, ts=ctx.admin_message_ts, text="対応済み", blocks=done_blocks)
             else:
                 slack.chat_update(channel=ctx.admin_channel, ts=ctx.admin_message_ts, text="対応済み", blocks=done_blocks)
         except Exception:
             pass
-
-# ----------------------以下、変更部分-------------------
 
 
 if TYPE_CHECKING:
@@ -76,9 +75,6 @@ def handle_approve_violation(
     notion: "NotionClient", 
     reply_text: str
 ) -> bool:
-    """
-    【追記】handler.pyから移植した承認ロジック
-    """
     origin_channel = ctx.value.get("origin_channel")
     origin_ts = ctx.value.get("origin_ts")
     notion_page_id = ctx.value.get("notion_page_id")
@@ -88,7 +84,6 @@ def handle_approve_violation(
         return False
 
     try:
-        # ユーザーへ警告返信
         slack.chat_postMessage(
             channel=origin_channel,
             thread_ts=origin_ts,
@@ -96,12 +91,10 @@ def handle_approve_violation(
         )
         logger.info(f"Posted warning to {origin_channel}/{origin_ts}")
 
-        # Notionステータス更新
         if notion_page_id:
             notion.update_status(notion_page_id, "Approved")
             logger.info(f"Updated Notion {notion_page_id} to Approved")
 
-        # 管理者メッセージ更新
         if ctx.admin_channel and ctx.admin_message_ts:
             blocks = [
                 {"type": "section", "text": {"type": "mrkdwn", "text": "✅ *対応完了* （警告送信済み）"}}
@@ -123,18 +116,15 @@ def handle_dismiss_violation(
     slack: "WebClient", 
     notion: "NotionClient"
 ) -> bool:
-
     notion_page_id = ctx.value.get("notion_page_id")
 
     try:
-        # Notionステータス更新
         if notion_page_id:
             notion.update_status(notion_page_id, "Dismissed")
             logger.info(f"Updated Notion {notion_page_id} to Dismissed")
         else:
             logger.warning("Missing notion_page_id for dismiss action")
 
-        # 管理者メッセージ更新
         if ctx.admin_channel and ctx.admin_message_ts:
             blocks = [
                 {"type": "section", "text": {"type": "mrkdwn", "text": "🚫 *Dismissed* （対応不要）"}}
