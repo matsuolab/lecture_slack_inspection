@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from .slack_webapi import SlackWebClient
 
 @dataclass(frozen=True)
@@ -46,3 +46,92 @@ def handle_approve(slack: SlackWebClient, ctx: ActionContext, reply_text: str) -
             slack.update_message(channel=ctx.admin_channel, ts=ctx.admin_message_ts, text="対応済み", blocks=done_blocks)
         except Exception:
             pass
+
+# ---------------------------------------------------------------------------
+# 以下が変更部分
+# ---------------------------------------------------------------------------
+
+if TYPE_CHECKING:
+    from slack_sdk import WebClient
+    from common.notion_client import NotionClient
+import logging
+logger = logging.getLogger()
+
+def handle_approve_violation(
+    ctx: ActionContext, 
+    slack: "WebClient", 
+    notion: "NotionClient", 
+    reply_text: str
+) -> bool:
+
+    origin_channel = ctx.value.get("origin_channel")
+    origin_ts = ctx.value.get("origin_ts")
+    notion_page_id = ctx.value.get("notion_page_id")
+
+    if not origin_channel or not origin_ts:
+        logger.error("Missing origin info for approve action")
+        return False
+
+    try:
+        # ユーザーへ警告返信
+        slack.chat_postMessage(
+            channel=origin_channel,
+            thread_ts=origin_ts,
+            text=reply_text
+        )
+        logger.info(f"Posted warning to {origin_channel}/{origin_ts}")
+
+        # Notionステータス更新
+        if notion_page_id:
+            notion.update_status(notion_page_id, "Approved")
+            logger.info(f"Updated Notion {notion_page_id} to Approved")
+
+        # 管理者メッセージ更新
+        if ctx.admin_channel and ctx.admin_message_ts:
+            blocks = [
+                {"type": "section", "text": {"type": "mrkdwn", "text": "✅ *対応完了* （警告送信済み）"}}
+            ]
+            slack.chat_update(
+                channel=ctx.admin_channel,
+                ts=ctx.admin_message_ts,
+                text="Approved",
+                blocks=blocks
+            )
+        return True
+
+    except Exception as e:
+        logger.error(f"Error executing approve_violation: {e}")
+        return False
+
+def handle_dismiss_violation(
+    ctx: ActionContext, 
+    slack: "WebClient", 
+    notion: "NotionClient"
+) -> bool:
+
+    notion_page_id = ctx.value.get("notion_page_id")
+
+    try:
+        # Notionステータス更新
+        if notion_page_id:
+            notion.update_status(notion_page_id, "Dismissed")
+            logger.info(f"Updated Notion {notion_page_id} to Dismissed")
+        else:
+            logger.warning("Missing notion_page_id for dismiss action")
+
+        # 管理者メッセージ更新
+        if ctx.admin_channel and ctx.admin_message_ts:
+            blocks = [
+                {"type": "section", "text": {"type": "mrkdwn", "text": "🚫 *Dismissed* （対応不要）"}}
+            ]
+            slack.chat_update(
+                channel=ctx.admin_channel,
+                ts=ctx.admin_message_ts,
+                text="Dismissed",
+                blocks=blocks
+            )
+        return True
+
+    except Exception as e:
+        logger.error(f"Error executing dismiss_violation: {e}")
+        return False
