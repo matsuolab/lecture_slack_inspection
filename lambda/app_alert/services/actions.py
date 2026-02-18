@@ -4,7 +4,6 @@ from typing import Any, TYPE_CHECKING
 import logging
 from slack_sdk import WebClient as SlackWebClient
 
-
 @dataclass(frozen=True)
 class ActionContext:
     action_id: str
