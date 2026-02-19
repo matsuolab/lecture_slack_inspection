@@ -1,0 +1,19 @@
+{
+  "type": "json_schema",
+  "json_schema": {
+    "name": "slack_violation_judge",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "properties": {
+        "is_violation": { "type": "boolean" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "article_id": { "type": ["string", "null"] },
+        "category": { "type": ["string", "null"] },
+        "reason": { "type": "string" }
+      },
+      "required": ["is_violation", "confidence", "article_id", "category", "reason"],
+      "additionalProperties": false
+    }
+  }
+}
