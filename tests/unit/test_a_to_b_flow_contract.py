@@ -41,6 +41,8 @@ def test_A_to_B_flow_dismiss_updates_notion(
     mock_result.is_violation = True
     mock_result.severity = "high"
     mock_result.rationale = "spam"
+    mock_result.confidence = 0.9
+    mock_result.article_id = "A-123"
     mocker.patch("app_inspect.handler.run_moderation", return_value=mock_result)
 
     mock_slack.chat_getPermalink.return_value = {"permalink": "http://slack.com/p1"}
@@ -87,5 +89,7 @@ def test_A_to_B_flow_dismiss_updates_notion(
     mock_slack.chat_postMessage.assert_not_called()
 
     # 5) Notion status を dismiss に更新する
-    # ※メソッド名はあなたの実装に合わせて変更してください
-    mock_notion.update_status.assert_called_with(value_from_A["notion_page_id"], "Dismissed")
+    mock_notion.update_status.assert_called_once()
+    call_args = mock_notion.update_status.call_args
+    assert call_args.args[0] == value_from_A["notion_page_id"]
+    assert call_args.args[1] == "Dismissed"

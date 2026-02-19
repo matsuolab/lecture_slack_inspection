@@ -1,11 +1,13 @@
 {
   "team": { "id": "T_TEST" },
+  "user": { "id": "U_ADMIN_01", "name": "admin" },
   "channel": { "id": "C_PRIVATE" },
   "message": { "ts": "1700000001.00001" },
+  "container": { "channel_id": "C_PRIVATE", "message_ts": "1700000001.00001" },
   "actions": [
     {
       "action_id": "dismiss_violation",
-      "value": "{\"version\":\"v1\",\"trace_id\":\"slack:Ev_TEST_0001\",\"origin_channel\":\"C_ORIGIN\",\"origin_ts\":\"1700000000.12345\",\"reason\":\"spam\",\"policy_refs\":[\"p3-2\"],\"notion_page_id\":\"abc123\"}"
+      "value": "{\"version\":\"v1\",\"trace_id\":\"slack:Ev_TEST_0001\",\"origin_channel\":\"C_ORIGIN\",\"origin_ts\":\"1700000000.12345\",\"reason\":\"spam\",\"policy_refs\":[\"p3-2\"],\"notion_page_id\":\"abc123\",\"article_id\":\"AI Community参加規約 第11条(iv)\"}"
     }
   ]
 }

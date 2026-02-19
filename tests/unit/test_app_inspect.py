@@ -60,6 +60,7 @@ def test_lambdaA_emits_contract_compliant_button_value(
     assert call_kwargs["confidence"] == 0.9
     assert call_kwargs["article_id"] == "A-123"
     assert call_kwargs["post_content"] is not None
+    assert call_kwargs.get("message_ts") is not None
 
     # ボタン契約を検証
     btn = _find_first_button(blocks)
@@ -75,3 +76,4 @@ def test_lambdaA_emits_contract_compliant_button_value(
     assert value["origin_channel"] == ev["channel"]
     assert value["origin_ts"] == ev["ts"]
     assert value["trace_id"] == f"slack:{body['event_id']}"
+    assert value.get("article_id") == "A-123"
