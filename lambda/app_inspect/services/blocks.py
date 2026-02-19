@@ -1,8 +1,7 @@
 import json
 import os
-import re
 from typing import Any, Optional
-
+from common.utils import parse_article_id
 
 POLICY_BLOCK_ID = "policy_ref_block"
 AID_REGULATION = "policy_regulation_select"
@@ -14,32 +13,12 @@ ARTICLES_JSON_PATH = os.path.join(
     "..", "..", "common", "data", "articles.json"
 )
 
-_ROMAN = {
-    "i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6,
-    "vii": 7, "viii": 8, "ix": 9, "x": 10, "xi": 11, "xii": 12,
-    "xiii": 13, "xiv": 14, "xv": 15, "xvi": 16,
-}
-
-
 def _load_articles() -> dict[str, Any]:
     with open(ARTICLES_JSON_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
-def _parse_article_id(article_id: str) -> tuple[Optional[int], Optional[int]]:
-    """
-    examples:
-      "11-iv" -> (11, 4)
-      "course-8-ii" -> (8, 2)
-      "edu-6" -> (6, None)
-      "course-drive-url" -> (None, None)  # 条/項で表現できない特則
-    """
-    if not article_id:
-        return None, None
 
-    m = re.search(r"-(\d+)(?:-([a-z]+))?$", article_id)
-    if not m:
-        return None, None
 
     article_no = int(m.group(1))
     roman = m.group(2)
@@ -98,27 +77,27 @@ def build_private_alert_blocks(
     data = _load_articles()
 
     # 1) 規約 options
-    regs = (
+    regulations = (
         data.get("metadata", {}).get("regulations")
         or sorted({a.get("regulation") for a in data.get("articles", []) if a.get("regulation")})
     )
-    regulation_options = [_option(r, r) for r in regs if r]
+    regulation_options = [_option(r, r) for r in regulations if r]
 
     # 2) 条 options
     article_nos = set()
     for a in data.get("articles", []):
-        an, _ = _parse_article_id(a.get("id", ""))
-        if an is not None:
-            article_nos.add(an)
+        article_no, _ = parse_article_id(a.get("id", ""))
+        if article_no is not None:
+            article_nos.add(article_no)
     article_options = [_option(f"第{i}条", str(i)) for i in range(1,15)]
     article_options.append(_option("（特則/条なし）", "special"))
 
     # 3) 項 options
     item_nos = set()
     for a in data.get("articles", []):
-        _, in_ = _parse_article_id(a.get("id", ""))
-        if in_ is not None:
-            item_nos.add(in_)
+        _, item_no = parse_article_id(a.get("id", ""))
+        if item_no is not None:
+            item_nos.add(item_no)
     item_options = [_option(f"第{i}項", str(i)) for i in range(1, 7)]
     item_options.append(_option("（項なし）", "0"))
 
@@ -128,12 +107,12 @@ def build_private_alert_blocks(
     default_item_no = None
 
     if default_article_id:
-        hit = _find_article_by_id(data, default_article_id)
-        if hit:
-            default_reg = hit.get("regulation")
-        an, in_ = _parse_article_id(default_article_id)
-        default_article_no = str(an) if an is not None else "special"
-        default_item_no = str(in_) if in_ is not None else "0"
+        matched_article = _find_article_by_id(data, default_article_id)
+        if matched_article:
+            default_reg = matched_article.get("regulation")
+        article_no, item_no = parse_article_id(default_article_id)
+        default_article_no = str(article_no) if article_no is not None else "special"
+        default_item_no = str(item_no) if item_no is not None else "0"
 
     reg_init = _initial_option(regulation_options, default_reg)
     art_init = _initial_option(article_options, default_article_no)

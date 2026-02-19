@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, TYPE_CHECKING, Optional
+from common.utils import parse_article_id
 
 if TYPE_CHECKING:
     from slack_sdk import WebClient
@@ -21,13 +22,6 @@ AID_REGULATION = "policy_regulation_select"
 AID_ARTICLE = "policy_article_select"
 AID_ITEM = "policy_item_select"
 
-_ROMAN = {
-    "i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6,
-    "vii": 7, "viii": 8, "ix": 9, "x": 10, "xi": 11, "xii": 12,
-    "xiii": 13, "xiv": 14, "xv": 15, "xvi": 16,
-}
-
-
 @dataclass(frozen=True)
 class ActionContext:
     action_id: str
@@ -42,9 +36,9 @@ class ActionContext:
 def _get_selected_value(payload: dict, block_id: str, action_id: str) -> str | None:
     state = (payload.get("state") or {}).get("values") or {}
     block = state.get(block_id) or {}
-    a = block.get(action_id) or {}
-    so = a.get("selected_option") or {}
-    return so.get("value")
+    action_data = block.get(action_id) or {}
+    selected_option = action_data.get("selected_option") or {}
+    return selected_option.get("value")
 
 
 def parse_action_context(payload: dict) -> ActionContext | None:
@@ -87,26 +81,6 @@ def _load_articles_list() -> list[dict[str, Any]]:
         data = json.load(f)
     return data.get("articles", [])
 
-
-def _parse_article_id(article_id: str) -> tuple[Optional[int], Optional[int]]:
-    """
-    examples:
-      "11-iv" -> (11, 4)
-      "course-8-ii" -> (8, 2)
-      "edu-6" -> (6, None)
-      "course-drive-url" -> (None, None)
-    """
-    if not article_id:
-        return None, None
-    m = re.search(r"-(\d+)(?:-([a-z]+))?$", article_id)
-    if not m:
-        return None, None
-    article_no = int(m.group(1))
-    roman = m.group(2)
-    item_no = _ROMAN.get(roman) if roman else None
-    return article_no, item_no
-
-
 def _find_article_by_id(article_id: str | None) -> dict[str, Any] | None:
     if not article_id:
         return None
@@ -144,12 +118,12 @@ def _find_article_by_selection(
     for a in _load_articles_list():
         if a.get("regulation") != regulation:
             continue
-        an, in_ = _parse_article_id(a.get("id", ""))
-        if an != article_no:
+        article_no, item_no = parse_article_id(a.get("id", ""))
+        if article_no != article_no:
             continue
-        if item_no is None and in_ is None:
+        if item_no is None and item_no is None:
             return a
-        if item_no is not None and in_ == item_no:
+        if item_no is not None and item_no == item_no:
             return a
 
     return None

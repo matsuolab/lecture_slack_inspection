@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-_DATA_DIR = os.path.join(os.path.dirname(__file__), "..","common","data")
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "..","..","common","data")
 
 # 追加: Prompt/Schema の置き場所（data配下で統一）
 _PROMPTS_DIR = os.path.join(_DATA_DIR, "prompts")
