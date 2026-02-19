@@ -11,6 +11,7 @@ from common.notion_client import NotionClient
 from .services.config import load_config
 from .services.moderation import run_moderation, encode_alert_button_value
 from .services.models import severity_rank, ModerationResult
+from .services.blocks import build_private_alert_blocks
 
 SERVICE = "app_inspect"
 
@@ -135,41 +136,17 @@ def lambda_handler(event: dict, context: Any) -> dict:
             reason=result.rationale,
             article_id=result.article_id,
         )
-        origin_channel = ev["channel"]
 
-        blocks = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        "🚨 *違反の可能性を検知*\n"
-                        f"*チャンネル*: <#{origin_channel}>\n"
-                        f"*投稿*: <{post_link}|元投稿を開く>\n"
-                        f"*内容*: {text[:200]}\n"
-                        f"*理由*: {result.rationale}"
-                    ),
-                },
-            },
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "削除勧告を送る"},
-                        "style": "danger",
-                        "action_id": "approve_violation",
-                        "value": button_value,
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Dismiss（対応不要）"},
-                        "action_id": "dismiss_violation",
-                        "value": button_value,
-                    },
-                ],
-            },
-        ]
+        blocks = build_private_alert_blocks(
+            reason=result.rationale,
+            trace_id=ctx.trace_id,
+            origin_channel=ev["channel"],
+            origin_ts=ev["ts"],
+            approve_value=button_value,
+            dismiss_value=button_value,
+            default_article_id=result.article_id,
+            user_id=ev.get("user", "unknown"),
+        )
 
         slack_client.chat_postMessage(channel=cfg.alert_private_channel_id, text="【違反検知アラート】", blocks=blocks)
 
