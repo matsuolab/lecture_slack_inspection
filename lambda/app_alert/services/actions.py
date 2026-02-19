@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _ARTICLES_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "app_inspect", "services", "data"
+    os.path.dirname(__file__), "..", "..", "common", "data"
 )
 
 
