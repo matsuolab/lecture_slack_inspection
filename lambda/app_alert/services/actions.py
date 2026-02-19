@@ -16,7 +16,6 @@ _ARTICLES_DIR = os.path.join(
     os.path.dirname(__file__), "..", "..", "common", "data"
 )
 
-# blocks.py と一致させる（重要）
 POLICY_BLOCK_ID = "policy_ref_block"
 AID_REGULATION = "policy_regulation_select"
 AID_ARTICLE = "policy_article_select"
@@ -125,7 +124,6 @@ def _find_article_by_selection(
     if not regulation or not selected_article:
         return None
     if selected_article == "special":
-        # 条番号がない特則系は、いまの3プルダウンでは一意に決められないので None
         return None
 
     try:
@@ -160,7 +158,6 @@ def _find_article_by_selection(
 def _format_ref(selected_regulation: str | None, selected_article: str | None, selected_item: str | None) -> str:
     regulation = selected_regulation or "規約不明"
 
-    # blocks.py仕様: article="special" / item="0" は「なし」
     if not selected_article or selected_article == "special":
         return regulation
 
