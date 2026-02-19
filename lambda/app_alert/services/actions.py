@@ -37,29 +37,6 @@ def parse_action_context(payload: dict) -> ActionContext | None:
         admin_message_ts=container.get("message_ts"),
     )
 
-def handle_approve(slack: SlackWebClient, ctx: ActionContext, reply_text: str) -> None:
-    origin_channel = ctx.value.get("origin_channel")
-    origin_ts = ctx.value.get("origin_ts")
-    if not origin_channel or not origin_ts:
-        return
-
-    try:
-        if hasattr(slack, "post_message"):
-            slack.post_message(channel=origin_channel, thread_ts=origin_ts, text=reply_text)
-        else:
-            slack.chat_postMessage(channel=origin_channel, thread_ts=origin_ts, text=reply_text)
-    except Exception:
-        pass
-
-    if ctx.admin_channel and ctx.admin_message_ts:
-        done_blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "✅ 対応しました（スレッドに削除勧告を送信済み）"}}]
-        try:
-            if hasattr(slack, "update_message"):
-                slack.update_message(channel=ctx.admin_channel, ts=ctx.admin_message_ts, text="対応済み", blocks=done_blocks)
-            else:
-                slack.chat_update(channel=ctx.admin_channel, ts=ctx.admin_message_ts, text="対応済み", blocks=done_blocks)
-        except Exception:
-            pass
 
 
 if TYPE_CHECKING:
