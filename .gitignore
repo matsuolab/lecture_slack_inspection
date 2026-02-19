@@ -12,3 +12,5 @@ node_modules/
 
 # CDK
 cdk.out/
+
+.pytest_cache/
