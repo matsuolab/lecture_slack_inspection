@@ -116,6 +116,8 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 result="Violation",
                 method="OpenAI",
                 reason=result.rationale,
+                severity=result.severity,       
+                categories=result.categories,
                 post_link=post_link,
                 article_id=result.article_id,
                 confidence=result.confidence,
