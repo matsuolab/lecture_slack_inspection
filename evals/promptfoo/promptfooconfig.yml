@@ -15,4 +15,4 @@ defaultTest:
     transform: JSON.parse(output)
 
 tests:
-  - file://testcases.yaml
+  - file://testcases.yml

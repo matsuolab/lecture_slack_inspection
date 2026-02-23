@@ -1,19 +1,9 @@
 import json
-import urllib.parse
 from app_alert.handler import lambda_handler
 
 
-def _to_apigw_form_event(payload: dict) -> dict:
-    body_str = "payload=" + urllib.parse.quote(json.dumps(payload))
-    return {
-        "body": body_str,
-        "headers": {"content-type": "application/x-www-form-urlencoded"},
-        "isBase64Encoded": False,
-    }
-
-
 def test_lambdaB_handles_fixture_interactivity_and_replies_to_origin(
-    load_contract_fixture, mock_external_services, mock_config
+    load_contract_fixture, mock_external_services, mock_config, to_apigw_form_event
 ):
     mock_external_services["signature"].is_valid_request.return_value = True
     mock_slack = mock_external_services["slack"]
@@ -25,7 +15,7 @@ def test_lambdaB_handles_fixture_interactivity_and_replies_to_origin(
     payload["container"].setdefault("channel_id", payload.get("channel", {}).get("id", "C_PRIVATE"))
     payload["container"].setdefault("message_ts", payload.get("message", {}).get("ts", "0"))
 
-    event = _to_apigw_form_event(payload)
+    event = to_apigw_form_event(payload)
     resp = lambda_handler(event, {})
 
     assert resp["statusCode"] == 200
@@ -41,7 +31,7 @@ def test_lambdaB_handles_fixture_interactivity_and_replies_to_origin(
     mock_slack.chat_update.assert_called_once()
 
 def test_lambdaB_handles_fixture_interactivity_dismiss_updates_notion_and_no_reply(
-    load_contract_fixture, mock_external_services, mock_config
+    load_contract_fixture, mock_external_services, mock_config, to_apigw_form_event
 ):
     mock_external_services["signature"].is_valid_request.return_value = True
     mock_slack = mock_external_services["slack"]
@@ -52,7 +42,7 @@ def test_lambdaB_handles_fixture_interactivity_dismiss_updates_notion_and_no_rep
     payload["container"].setdefault("channel_id", payload.get("channel", {}).get("id", "C_PRIVATE"))
     payload["container"].setdefault("message_ts", payload.get("message", {}).get("ts", "0"))
 
-    event = _to_apigw_form_event(payload)
+    event = to_apigw_form_event(payload)
     resp = lambda_handler(event, {})
 
     assert resp["statusCode"] == 200
