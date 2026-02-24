@@ -9,23 +9,24 @@ from openai import OpenAI
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
 from .services.config import load_config
-from .services.moderation import run_moderation, encode_alert_button_value
+from .services.moderation import run_moderation
+from .components.slack_builder import encode_alert_button_value
 from .services.models import severity_rank, ModerationResult
 
 SERVICE = "app_inspect"
 
 def lambda_handler(event: dict, context: Any) -> dict:
     # 1. コンテキスト初期化（この時点でSlackのIDなどが自動抽出される）
-    ctx = build_context(event, context, service=SERVICE)
+    context = build_context(event, context, service=SERVICE)
     total_timer = Timer()
-    log_info(ctx, action="request_received")
+    log_info(context, action="request_received")
 
     try:
         # 1.5 Slackリトライ検出（3秒タイムアウト時の再送を即返却）
         raw_headers = event.get("headers") or {}
         lower_headers = {k.lower(): v for k, v in raw_headers.items()}
         if lower_headers.get("x-slack-retry-num"):
-            log_info(ctx, action="retry_skip", retry_num=lower_headers["x-slack-retry-num"])
+            log_info(context, action="retry_skip", retry_num=lower_headers["x-slack-retry-num"])
             return {"statusCode": 200, "body": "ok"}
 
         # 設定のロード
@@ -40,12 +41,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
             body_json = json.loads(body)
         except Exception as e:
             # log_error の第3引数は例外オブジェクトそのものを渡す
-            log_error(ctx, action="parse_json", error=e)
+            log_error(context, action="parse_json", error=e)
             return {"statusCode": 400, "body": "invalid json"}
 
         # 3. URL Verification (最優先)
         if body_json.get("type") == "url_verification":
-            log_info(ctx, action="url_verification", result="success")
+            log_info(context, action="url_verification", result="success")
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
@@ -57,7 +58,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         headers = event.get("headers") or {}
         if not verifier.is_valid_request(body, headers):
             # 検証失敗は警告として記録
-            log_info(ctx, action="verify_signature", result="fail", detail="invalid signature")
+            log_info(context, action="verify_signature", result="fail", detail="invalid signature")
             return {"statusCode": 401, "body": "invalid signature"}
 
         # 5. イベントフィルタリング
@@ -71,7 +72,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             return {"statusCode": 200, "body": "empty_text"}
 
         # 6. モデレーション実行
-        log_info(ctx, action="start_moderation", text_length=len(text))
+        log_info(context, action="start_moderation", text_length=len(text))
         inference_timer = Timer()
         
         if cfg.use_mock_openai:
@@ -89,10 +90,10 @@ def lambda_handler(event: dict, context: Any) -> dict:
             openai_client = OpenAI(api_key=cfg.openai_api_key)
             result = run_moderation(openai_client, cfg.openai_model, cfg.guidelines_text, text)
         
-        emit_metric(ctx, "InferenceLatencyMs", inference_timer.ms(), unit="Milliseconds")
+        emit_metric(context, "InferenceLatencyMs", inference_timer.ms(), unit="Milliseconds")
 
         if not result.is_violation or severity_rank(result.severity) < severity_rank(cfg.min_severity_to_alert):
-            log_info(ctx, action="judge", result="not_violation")
+            log_info(context, action="judge", result="not_violation")
             return {"statusCode": 200, "body": "ok"}
 
         # 7. 外部連携
@@ -102,7 +103,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
             # 重複チェック（同じ投稿の二重処理防止）
             if notion.check_duplicate_violation(ev["ts"]):
-                log_info(ctx, action="duplicate_skip", message_ts=ev["ts"])
+                log_info(context, action="duplicate_skip", message_ts=ev["ts"])
                 return {"statusCode": 200, "body": "duplicate"}
 
             # 投稿リンク
@@ -121,15 +122,15 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 confidence=result.confidence,
                 message_ts=ev["ts"],
             )
-            log_info(ctx, action="notion_page_created", page_id=notion_page_id)
+            log_info(context, action="notion_page_created", page_id=notion_page_id)
         except Exception as e:
-            log_error(ctx, action="external_service_call", error=e)
+            log_error(context, action="external_service_call", error=e)
             notion_page_id = None
 
         # アラートボタンに埋め込むペイロード
         button_value = encode_alert_button_value(
             notion_page_id=notion_page_id,
-            trace_id=ctx.trace_id,
+            trace_id=context.trace_id,
             origin_channel=ev["channel"],
             origin_ts=ev["ts"],
             reason=result.rationale,
@@ -173,13 +174,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         slack_client.chat_postMessage(channel=cfg.alert_private_channel_id, text="【違反検知アラート】", blocks=blocks)
 
-        log_info(ctx, action="alert_sent", result="success", page_id=notion_page_id)
-        emit_metric(ctx, "TotalLatencyMs", total_timer.ms(), unit="Milliseconds")
+        log_info(context, action="alert_sent", result="success", page_id=notion_page_id)
+        emit_metric(context, "TotalLatencyMs", total_timer.ms(), unit="Milliseconds")
 
         return {"statusCode": 200, "body": "ok"}
 
     except Exception as e:
         # e (例外オブジェクト) をそのまま渡すことで log_error の仕様に合わせる
-        log_error(ctx, action="handler_process", error=e)
-        emit_metric(ctx, "handler_error", 1)
+        log_error(context, action="handler_process", error=e)
+        emit_metric(context, "handler_error", 1)
         return {"statusCode": 200, "body": "error_handled"}
