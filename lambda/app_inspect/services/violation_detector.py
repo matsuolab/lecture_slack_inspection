@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+_COMMON_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "common", "data")
 
 # 追加: Prompt/Schema の置き場所（data配下で統一）
 _PROMPTS_DIR = os.path.join(_DATA_DIR, "prompts")
@@ -97,7 +98,7 @@ class ViolationDetector:
     def __init__(self, openai_client, articles_path: str = None, ng_patterns_path: str = None):
         self.client = openai_client
         self.articles = _load_json_list(
-            articles_path or os.path.join(_DATA_DIR, "articles.json"),
+            articles_path or os.path.join(_COMMON_DATA_DIR, "articles.json"),
             "articles",
         )
         self.ng_patterns = _load_json_list(

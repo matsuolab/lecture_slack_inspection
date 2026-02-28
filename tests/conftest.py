@@ -2,6 +2,7 @@
 import sys
 import os
 import json
+import urllib.parse
 from pathlib import Path
 import pytest
 from unittest.mock import MagicMock
@@ -42,9 +43,9 @@ def load_contract_fixture():
 @pytest.fixture(scope="session")
 def alert_button_value_schema():
     """
-    contracts/alert_button_value.schema.json を読み込む
+    contracts/schemas/alert_button_value.schema.json を読み込む
     """
-    schema_path = CONTRACTS_DIR / "alert_button_value.schema.json"
+    schema_path = CONTRACTS_DIR / "schemas" / "alert_button_value.schema.json"
     if not schema_path.exists():
         raise FileNotFoundError(f"schema not found: {schema_path}")
     return _read_json(schema_path)
@@ -117,3 +118,21 @@ def mock_external_services(mocker):
         "openai": mock_openai_client,
         "notion": mock_notion_client,
     }
+
+
+# -----------------------------
+# Slack イベントヘルパー
+# -----------------------------
+@pytest.fixture
+def to_apigw_form_event():
+    """
+    Slackインタラクティビティペイロードを API Gateway形式のイベントに変換するファクトリー
+    """
+    def _convert(payload: dict) -> dict:
+        body_str = "payload=" + urllib.parse.quote(json.dumps(payload))
+        return {
+            "body": body_str,
+            "headers": {"content-type": "application/x-www-form-urlencoded"},
+            "isBase64Encoded": False,
+        }
+    return _convert

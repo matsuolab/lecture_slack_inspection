@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _ARTICLES_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "app_inspect", "services", "data"
+    os.path.dirname(__file__), "..", "..", "common", "data"
 )
 
 
@@ -86,16 +86,16 @@ def build_warning_text(default_text: str, article_id: str | None) -> str:
 
 
 def handle_approve_violation(
-    ctx: ActionContext,
+    context: ActionContext,
     slack: "WebClient",
     notion: "NotionClient",
     reply_text: str,
     responder_id: str | None = None,
 ) -> bool:
-    origin_channel = ctx.value.get("origin_channel")
-    origin_ts = ctx.value.get("origin_ts")
-    notion_page_id = ctx.value.get("notion_page_id")
-    article_id = ctx.value.get("article_id")
+    origin_channel = context.value.get("origin_channel")
+    origin_ts = context.value.get("origin_ts")
+    notion_page_id = context.value.get("notion_page_id")
+    article_id = context.value.get("article_id")
 
     if not origin_channel or not origin_ts:
         logger.error("Missing origin info for approve action")
@@ -119,15 +119,15 @@ def handle_approve_violation(
             notion.update_status(notion_page_id, "Approved", **update_kwargs)
             logger.info(f"Updated Notion {notion_page_id} to Approved")
 
-        if ctx.admin_channel and ctx.admin_message_ts:
+        if context.admin_channel and context.admin_message_ts:
             responder_text = f" by <@{responder_id}>" if responder_id else ""
             blocks = [
                 {"type": "section", "text": {"type": "mrkdwn",
                     "text": f"✅ *対応完了* （警告送信済み）{responder_text}"}}
             ]
             slack.chat_update(
-                channel=ctx.admin_channel,
-                ts=ctx.admin_message_ts,
+                channel=context.admin_channel,
+                ts=context.admin_message_ts,
                 text="Approved",
                 blocks=blocks,
             )
@@ -139,12 +139,12 @@ def handle_approve_violation(
 
 
 def handle_dismiss_violation(
-    ctx: ActionContext,
+    context: ActionContext,
     slack: "WebClient",
     notion: "NotionClient",
     responder_id: str | None = None,
 ) -> bool:
-    notion_page_id = ctx.value.get("notion_page_id")
+    notion_page_id = context.value.get("notion_page_id")
 
     try:
         if notion_page_id:
@@ -156,15 +156,15 @@ def handle_dismiss_violation(
         else:
             logger.warning("Missing notion_page_id for dismiss action")
 
-        if ctx.admin_channel and ctx.admin_message_ts:
+        if context.admin_channel and context.admin_message_ts:
             responder_text = f" by <@{responder_id}>" if responder_id else ""
             blocks = [
                 {"type": "section", "text": {"type": "mrkdwn",
                     "text": f"🚫 *Dismissed* （対応不要）{responder_text}"}}
             ]
             slack.chat_update(
-                channel=ctx.admin_channel,
-                ts=ctx.admin_message_ts,
+                channel=context.admin_channel,
+                ts=context.admin_message_ts,
                 text="Dismissed",
                 blocks=blocks,
             )
