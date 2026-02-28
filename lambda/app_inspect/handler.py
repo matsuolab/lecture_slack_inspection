@@ -101,6 +101,35 @@ def lambda_handler(event: dict, context: Any) -> dict:
             notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
             slack_client = WebClient(token=cfg.slack_bot_token)
 
+            # Slack APIで名前を解決する 
+            raw_user_id = ev.get("user", "")
+            raw_channel_id = ev.get("channel", "")
+            raw_team_id = body_json.get("team_id", "")
+
+            # 初期値（APIが失敗した場合は元のIDを入れる）
+            profile_name = f"@{raw_user_id}"
+            channel_name = raw_channel_id
+            workspace_name = raw_team_id
+
+            try:
+                # ユーザーの表示名を取得
+                if raw_user_id:
+                    u_res = slack_client.users_info(user=raw_user_id)
+                    p = u_res["user"]["profile"]
+                    profile_name = "@" + (p.get("display_name") or p.get("real_name") or raw_user_id)
+                
+                # チャンネル名を取得
+                if raw_channel_id:
+                    c_res = slack_client.conversations_info(channel=raw_channel_id)
+                    channel_name = c_res["channel"]["name"]
+                
+                # ワークスペース名を取得
+                if raw_team_id:
+                    t_res = slack_client.team_info(team=raw_team_id)
+                    workspace_name = t_res["team"]["name"]
+            except Exception as e:
+                log_error(ctx, action="fetch_slack_names", error=e)
+
             # 重複チェック（同じ投稿の二重処理防止）
             if notion.check_duplicate_violation(ev["ts"]):
                 log_info(context, action="duplicate_skip", message_ts=ev["ts"])
@@ -112,11 +141,14 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
             notion_page_id = notion.create_violation_log(
                 post_content=text,
-                user_id=ev.get("user", "unknown"),
-                channel=ev["channel"],
+                user_id=profile_name,
+                channel=channel_name,
+                workspace=workspace_name,
                 result="Violation",
                 method="OpenAI",
                 reason=result.rationale,
+                severity=result.severity,       
+                categories=result.categories,
                 post_link=post_link,
                 article_id=result.article_id,
                 confidence=result.confidence,

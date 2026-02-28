@@ -63,6 +63,9 @@ class NotionClient:
         result: str,
         method: str,
         reason: str = None,
+        severity: str = None,          
+        categories: list[str] = None,
+        workspace: str = None,
         post_link: str = None,
         article_id: str = None,
         confidence: float = None,
@@ -88,6 +91,18 @@ class NotionClient:
             "検出方法": {"select": {"name": method}},
             "対応ステータス": {"select": {"name": "Unprocessed"}},
         }
+
+        if workspace:
+            props["ワークスペース"] = {"rich_text": [{"text": {"content": workspace}}]}
+
+        if reason:
+            props["違反理由"] = {"rich_text": [{"text": {"content": reason[:2000]}}]}
+        
+        if severity:
+            props["重大度"] = {"select": {"name": severity}}
+            
+        if categories:
+            props["違反カテゴリ"] = {"multi_select": [{"name": cat} for cat in categories]}
 
         if post_link:
             props["投稿リンク"] = {"url": post_link}
