@@ -14,3 +14,4 @@ node_modules/
 cdk.out/
 
 .pytest_cache/
+.DS_Store
