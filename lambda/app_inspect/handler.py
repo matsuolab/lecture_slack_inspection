@@ -11,6 +11,7 @@ from common.notion_client import NotionClient
 from .services.config import load_config
 from .services.moderation import run_moderation
 from .components.slack_builder import encode_alert_button_value
+from .components.slack_ui import build_violation_alert_blocks
 from .services.models import severity_rank, ModerationResult
 
 SERVICE = "app_inspect"
@@ -170,39 +171,14 @@ def lambda_handler(event: dict, context: Any) -> dict:
         )
         origin_channel = ev["channel"]
 
-        blocks = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        "🚨 *違反の可能性を検知*\n"
-                        f"*チャンネル*: <#{origin_channel}>\n"
-                        f"*投稿*: <{post_link}|元投稿を開く>\n"
-                        f"*内容*: {text[:200]}\n"
-                        f"*理由*: {result.rationale}"
-                    ),
-                },
-            },
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "削除勧告を送る"},
-                        "style": "danger",
-                        "action_id": "approve_violation",
-                        "value": button_value,
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Dismiss（対応不要）"},
-                        "action_id": "dismiss_violation",
-                        "value": button_value,
-                    },
-                ],
-            },
-        ]
+        # UI定義は slack_ui.py に委譲
+        blocks = build_violation_alert_blocks(
+            origin_channel_id=origin_channel,
+            post_link=post_link,
+            post_text=text,
+            rationale=result.rationale,
+            button_value=button_value,
+        )
 
         slack_client.chat_postMessage(channel=cfg.alert_private_channel_id, text="【違反検知アラート】", blocks=blocks)
 
