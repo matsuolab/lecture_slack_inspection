@@ -41,7 +41,6 @@ def lambda_handler(event: dict, context: Any) -> dict:
         try:
             body_json = json.loads(body)
         except Exception as e:
-            # log_error の第3引数は例外オブジェクトそのものを渡す
             log_error(context, action="parse_json", error=e)
             return {"statusCode": 400, "body": "invalid json"}
 
@@ -58,13 +57,11 @@ def lambda_handler(event: dict, context: Any) -> dict:
         verifier = SignatureVerifier(cfg.slack_signing_secret)
         headers = event.get("headers") or {}
         if not verifier.is_valid_request(body, headers):
-            # 検証失敗は警告として記録
             log_info(context, action="verify_signature", result="fail", detail="invalid signature")
             return {"statusCode": 401, "body": "invalid signature"}
 
         # 5. イベントフィルタリング
         ev = body_json.get("event", {})
-        # Bot自身の投稿などを無視
         if body_json.get("type") != "event_callback" or ev.get("type") != "message" or ev.get("bot_id") or ev.get("subtype"):
             return {"statusCode": 200, "body": "ignored"}
 
@@ -75,7 +72,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         # 6. モデレーション実行
         log_info(context, action="start_moderation", text_length=len(text))
         inference_timer = Timer()
-        
+
         if cfg.use_mock_openai:
             is_mock_violation = "違反" in text
             result = ModerationResult(
@@ -90,7 +87,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         else:
             openai_client = OpenAI(api_key=cfg.openai_api_key)
             result = run_moderation(openai_client, cfg.openai_model, cfg.guidelines_text, text)
-        
+
         emit_metric(context, "InferenceLatencyMs", inference_timer.ms(), unit="Milliseconds")
 
         if not result.is_violation or severity_rank(result.severity) < severity_rank(cfg.min_severity_to_alert):
@@ -98,38 +95,38 @@ def lambda_handler(event: dict, context: Any) -> dict:
             return {"statusCode": 200, "body": "ok"}
 
         # 7. 外部連携
+        # UIで使う値は try の外で初期化しておく（UI構築時の未定義事故を避ける）
+        slack_client = WebClient(token=cfg.slack_bot_token)
+
+        raw_user_id = ev.get("user", "")
+        raw_channel_id = ev.get("channel", "")
+        raw_team_id = body_json.get("team_id", "")
+
+        profile_name = f"@{raw_user_id}"
+        channel_name = raw_channel_id
+        workspace_name = raw_team_id
+        post_link = None
+        notion_page_id = None
+
         try:
             notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
-            slack_client = WebClient(token=cfg.slack_bot_token)
 
-            # Slack APIで名前を解決する 
-            raw_user_id = ev.get("user", "")
-            raw_channel_id = ev.get("channel", "")
-            raw_team_id = body_json.get("team_id", "")
-
-            # 初期値（APIが失敗した場合は元のIDを入れる）
-            profile_name = f"@{raw_user_id}"
-            channel_name = raw_channel_id
-            workspace_name = raw_team_id
-
+            # Slack APIで名前を解決する
             try:
-                # ユーザーの表示名を取得
                 if raw_user_id:
                     u_res = slack_client.users_info(user=raw_user_id)
                     p = u_res["user"]["profile"]
                     profile_name = "@" + (p.get("display_name") or p.get("real_name") or raw_user_id)
-                
-                # チャンネル名を取得
+
                 if raw_channel_id:
                     c_res = slack_client.conversations_info(channel=raw_channel_id)
                     channel_name = c_res["channel"]["name"]
-                
-                # ワークスペース名を取得
+
                 if raw_team_id:
                     t_res = slack_client.team_info(team=raw_team_id)
                     workspace_name = t_res["team"]["name"]
             except Exception as e:
-                log_error(ctx, action="fetch_slack_names", error=e)
+                log_error(context, action="fetch_slack_names", error=e)
 
             # 重複チェック（同じ投稿の二重処理防止）
             if notion.check_duplicate_violation(ev["ts"]):
@@ -148,7 +145,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 result="Violation",
                 method="OpenAI",
                 reason=result.rationale,
-                severity=result.severity,       
+                severity=result.severity,
                 categories=result.categories,
                 post_link=post_link,
                 article_id=result.article_id,
@@ -156,6 +153,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 message_ts=ev["ts"],
             )
             log_info(context, action="notion_page_created", page_id=notion_page_id)
+
         except Exception as e:
             log_error(context, action="external_service_call", error=e)
             notion_page_id = None
@@ -169,18 +167,42 @@ def lambda_handler(event: dict, context: Any) -> dict:
             reason=result.rationale,
             article_id=result.article_id,
         )
-        origin_channel = ev["channel"]
 
-        # UI定義は slack_ui.py に委譲
+        # UI定義（slack_ui.py）に委譲
+        # 「確信度はLLMのときのみ」: 現状の run_moderation は method を返さないため、
+        # 一旦は rationale 文言から NG 判定を判別する暫定ロジック
+        rationale_text = result.rationale or ""
+        if cfg.use_mock_openai:
+            detection_method = "Mock"
+            confidence_for_ui = None
+        elif "NGパターン検出" in rationale_text:
+            detection_method = "NGワード"
+            confidence_for_ui = None
+        else:
+            detection_method = "LLM"
+            confidence_for_ui = result.confidence
+
         blocks = build_violation_alert_blocks(
-            origin_channel_id=origin_channel,
+            author_user_id=(raw_user_id or None),
+            author_display=(profile_name or None),
+            origin_channel_id=raw_channel_id,
             post_link=post_link,
+            post_ts=ev.get("ts"),
             post_text=text,
+            detection_method=detection_method,
+            confidence=confidence_for_ui,
             rationale=result.rationale,
+            guideline_article=result.article_id,
+            categories=result.categories,
             button_value=button_value,
+            # プルダウンは slack_ui.py 側の DEFAULT（選択肢1/2/3）を利用
         )
 
-        slack_client.chat_postMessage(channel=cfg.alert_private_channel_id, text="【違反検知アラート】", blocks=blocks)
+        slack_client.chat_postMessage(
+            channel=cfg.alert_private_channel_id,
+            text="【違反検知アラート】",
+            blocks=blocks
+        )
 
         log_info(context, action="alert_sent", result="success", page_id=notion_page_id)
         emit_metric(context, "TotalLatencyMs", total_timer.ms(), unit="Milliseconds")
@@ -188,7 +210,6 @@ def lambda_handler(event: dict, context: Any) -> dict:
         return {"statusCode": 200, "body": "ok"}
 
     except Exception as e:
-        # e (例外オブジェクト) をそのまま渡すことで log_error の仕様に合わせる
         log_error(context, action="handler_process", error=e)
         emit_metric(context, "handler_error", 1)
         return {"statusCode": 200, "body": "error_handled"}
