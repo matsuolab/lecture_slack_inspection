@@ -26,7 +26,12 @@ def run_moderation(client: OpenAI, model: str, guidelines: str, message_text: st
             "recommended_reply": "",
             "confidence": result.confidence,
             "article_id": result.article_id,
+            "method": result.method,  # ★追加（"NGワード" / "LLM"）
         })
     except Exception as e:
         print(f"Detection error: {e}")
-        return normalize_result({"is_violation": False, "rationale": f"Error: {e}"})
+        return normalize_result({
+            "is_violation": False,
+            "rationale": f"Error: {e}",
+            "method": None,  # ★追加（エラー時は不明扱い）
+        })
