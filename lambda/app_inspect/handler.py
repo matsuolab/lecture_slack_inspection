@@ -169,18 +169,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
         )
 
         # UI定義（slack_ui.py）に委譲
-        # 「確信度はLLMのときのみ」: 現状の run_moderation は method を返さないため、
-        # 一旦は rationale 文言から NG 判定を判別する暫定ロジック
-        rationale_text = result.rationale or ""
+        # result.method に基づいて確信度の表示有無を決定す
         if cfg.use_mock_openai:
             detection_method = "Mock"
             confidence_for_ui = None
-        elif "NGパターン検出" in rationale_text:
-            detection_method = "NGワード"
-            confidence_for_ui = None
         else:
-            detection_method = "LLM"
-            confidence_for_ui = result.confidence
+            detection_method = getattr(result, "method", None) or "LLM"
+            confidence_for_ui = result.confidence if detection_method == "LLM" else None
 
         blocks = build_violation_alert_blocks(
             author_user_id=(raw_user_id or None),
@@ -195,7 +190,6 @@ def lambda_handler(event: dict, context: Any) -> dict:
             guideline_article=result.article_id,
             categories=result.categories,
             button_value=button_value,
-            # プルダウンは slack_ui.py 側の DEFAULT（選択肢1/2/3）を利用
         )
 
         slack_client.chat_postMessage(
