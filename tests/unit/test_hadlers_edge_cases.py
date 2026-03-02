@@ -6,9 +6,6 @@ from unittest.mock import MagicMock
 from app_inspect.handler import lambda_handler as inspect_handler
 from app_alert.handler import lambda_handler as alert_handler
 
-# ==========================================
-# ユーティリティ関数
-# ==========================================
 def _create_apigw_event(body_dict: dict, headers: dict = None) -> dict:
     """Slack Event APIからのリクエストを模したAPI Gatewayイベントを作成"""
     return {
@@ -29,9 +26,7 @@ def _create_interactivity_event(payload_dict: dict, headers: dict = None) -> dic
         "isBase64Encoded": False,
     }
 
-# ==========================================
 # Lambda A (app_inspect) のエッジケーステスト
-# ==========================================
 
 def test_inspect_retry_skip(mock_external_services, mock_config):
     """Slackからの再送イベント (x-slack-retry-num) を即座にスキップすることを確認"""
@@ -136,9 +131,7 @@ def test_inspect_external_api_error(mock_external_services, mock_config, mocker)
     assert resp["body"] == "error_handled"
 
 
-# ==========================================
 # Lambda B (app_alert) のエッジケーステスト
-# ==========================================
 
 def test_alert_invalid_signature(mock_external_services, mock_config):
     """署名検証に失敗した場合、401を返すことを確認"""
