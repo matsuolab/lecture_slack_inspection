@@ -2,7 +2,7 @@ import json
 import os
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -15,6 +15,9 @@ _ARTICLES_DIR = os.path.join(
     os.path.dirname(__file__), "..", "..", "common", "data"
 )
 
+# app_inspect/components/slack_ui.py に合わせた block_id
+_WARNING_TEMPLATE_BLOCK_ID = "warning_template"
+
 
 @dataclass(frozen=True)
 class ActionContext:
@@ -22,6 +25,8 @@ class ActionContext:
     value: dict[str, Any]
     admin_channel: str | None
     admin_message_ts: str | None
+    # 運営メッセージの元 blocks（押下後も詳細を残すため）
+    admin_blocks: list[dict[str, Any]] | None
 
 
 def parse_action_context(payload: dict) -> ActionContext | None:
@@ -41,11 +46,17 @@ def parse_action_context(payload: dict) -> ActionContext | None:
         value = {}
 
     container = payload.get("container") or {}
+
+    # 元メッセージの blocks を取得
+    msg = payload.get("message") or {}
+    admin_blocks = msg.get("blocks") if isinstance(msg.get("blocks"), list) else None
+
     return ActionContext(
         action_id=action_id,
         value=value,
         admin_channel=container.get("channel_id"),
         admin_message_ts=container.get("message_ts"),
+        admin_blocks=admin_blocks,
     )
 
 
@@ -85,6 +96,38 @@ def build_warning_text(default_text: str, article_id: str | None) -> str:
     )
 
 
+def _now_slack_datetime_token() -> str:
+    now = datetime.now(timezone.utc)
+    unix_sec = int(now.timestamp())
+    fallback = now.strftime("%Y-%m-%d %H:%M")  # フォールバック（分まで）
+    return f"<!date^{unix_sec}^{{date_short_pretty}} {{time}}|{fallback}>"
+
+
+def _build_admin_updated_blocks(
+    original_blocks: list[dict[str, Any]] | None,
+    status_text: str,
+) -> list[dict[str, Any]]:
+    status_block = {
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": status_text}],
+    }
+
+    new_blocks: list[dict[str, Any]] = [status_block]
+
+    for b in (original_blocks or []):
+        # ボタン（approve/dismiss）を消す
+        if b.get("type") == "actions":
+            continue
+
+        # プルダウン（warning_template）を消す
+        if b.get("type") == "section" and b.get("block_id") == _WARNING_TEMPLATE_BLOCK_ID:
+            continue
+
+        new_blocks.append(b)
+
+    return new_blocks
+
+
 def handle_approve_violation(
     context: ActionContext,
     slack: "WebClient",
@@ -113,24 +156,27 @@ def handle_approve_violation(
 
         if notion_page_id:
             update_kwargs: dict[str, Any] = {}
-            update_kwargs["warning_sent_at"] = datetime.now()
+            update_kwargs["warning_sent_at"] = datetime.now()  # 既存挙動のまま
             if responder_id:
                 update_kwargs["responder_id"] = responder_id
             notion.update_status(notion_page_id, "Approved", **update_kwargs)
             logger.info(f"Updated Notion {notion_page_id} to Approved")
 
+        # 運営メッセージを「詳細は残して、ボタン/プルダウンだけ消す」形で更新 + 対応日時を表示
         if context.admin_channel and context.admin_message_ts:
-            responder_text = f" by <@{responder_id}>" if responder_id else ""
-            blocks = [
-                {"type": "section", "text": {"type": "mrkdwn",
-                    "text": f"✅ *対応完了* （警告送信済み）{responder_text}"}}
-            ]
+            responder_text = f"<@{responder_id}>" if responder_id else "（不明）"
+            handled_at = _now_slack_datetime_token()
+            status_text = f"✅ *Approved*（警告送信済み） by {responder_text} • {handled_at}"
+
+            blocks = _build_admin_updated_blocks(context.admin_blocks, status_text)
+
             slack.chat_update(
                 channel=context.admin_channel,
                 ts=context.admin_message_ts,
                 text="Approved",
                 blocks=blocks,
             )
+
         return True
 
     except Exception as e:
@@ -156,18 +202,21 @@ def handle_dismiss_violation(
         else:
             logger.warning("Missing notion_page_id for dismiss action")
 
+        # 運営メッセージを「詳細は残して、ボタン/プルダウンだけ消す」形で更新 + 対応日時を表示
         if context.admin_channel and context.admin_message_ts:
-            responder_text = f" by <@{responder_id}>" if responder_id else ""
-            blocks = [
-                {"type": "section", "text": {"type": "mrkdwn",
-                    "text": f"🚫 *Dismissed* （対応不要）{responder_text}"}}
-            ]
+            responder_text = f"<@{responder_id}>" if responder_id else "（不明）"
+            handled_at = _now_slack_datetime_token()
+            status_text = f"🚫 *Dismissed*（対応不要） by {responder_text} • {handled_at}"
+
+            blocks = _build_admin_updated_blocks(context.admin_blocks, status_text)
+
             slack.chat_update(
                 channel=context.admin_channel,
                 ts=context.admin_message_ts,
                 text="Dismissed",
                 blocks=blocks,
             )
+
         return True
 
     except Exception as e:
