@@ -9,6 +9,7 @@ Slack監視Botが違反投稿を記録・管理するためのNotionデータベ
 - **System**:
     - **Write**: Lambda A (app_inspect) - 新規作成
     - **Update**: Lambda B (app_alert) - ステータス更新
+    - **Read/Update**: Lambda C (app_remind) - リマインド対象クエリ + フラグ更新
 
 ## プロパティ定義
 
@@ -26,7 +27,8 @@ Slack監視Botが違反投稿を記録・管理するためのNotionデータベ
 | **検出日時** | Date | YES | 検知日時（ISO 8601）。 | - |
 | **対応者** | RichText | NO | ボタンを押した管理者のSlack User ID。<br>Lambda Bにより記録される。 | - |
 | **警告送信日時** | Date | NO | 警告送信が実行された日時（ISO 8601）。<br>Lambda Bにより `Approved` 時に記録される。 | - |
-| **リマインド送信済** | Checkbox | NO | 削除依頼リマインド送信後にtrueにする。<br>Lambda C（将来実装）用。 | - |
+| **ワークスペース** | Select | NO | Slackワークスペース名。<br>Lambda A が投稿リンクから自動抽出して設定。<br>マルチワークスペース管理・フィルタ用。 | 動的（ワークスペース名） |
+| **リマインド送信済** | Checkbox | NO | 削除依頼リマインド送信後にtrueにする。<br>Lambda C (app_remind) が更新。 | - |
 
 ---
 
@@ -38,3 +40,14 @@ Slack監視Botが違反投稿を記録・管理するためのNotionデータベ
 
 ### オプショナル項目
 `信頼度` および `該当条文` は、Lambda A (app_inspect) の判定ロジック修正により値が供給されることを前提としています。
+
+### Lambda C (app_remind) のクエリ条件
+```
+対応ステータス = "Approved" AND リマインド送信済 = false
+```
+該当レコードに対し、`警告送信日時` から48時間経過していればリマインドを送信。
+`警告送信日時` が空の場合は `last_edited_time`（ページ最終更新日時）をフォールバックとして使用。
+
+### ワークスペースプロパティ
+Lambda A が `投稿リンク` のパーマリンク（`https://{workspace}.slack.com/archives/...`）からワークスペース名を抽出し、`ワークスペース` selectプロパティに自動設定。
+Notion上でワークスペース別にフィルタ・ビューを作成することで、マルチワークスペース環境での横断管理が可能。

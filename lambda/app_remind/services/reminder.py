@@ -8,23 +8,9 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from common.notion_client import NotionClient
+from common.template_manager import resolve_template, render_template, compose_message
 
 logger = logging.getLogger(__name__)
-
-WARNING_MESSAGE = (
-    ":warning: *ガイドライン違反の通知*\n\n"
-    "この投稿はコミュニティガイドラインに抵触する可能性があるため、"
-    "投稿の削除または修正をお願いします。\n"
-    "ご不明点がありましたら管理者までお問い合わせください。"
-)
-
-REMINDER_MESSAGE = (
-    ":bell: *削除リマインド*\n\n"
-    "この投稿はコミュニティガイドラインに抵触する可能性があるため、"
-    "削除のお願いをしておりました。\n\n"
-    "まだ投稿が残っているようですので、ご確認・削除をお願いいたします。\n"
-    "ご不明点がありましたら管理者までお問い合わせください。"
-)
 
 TITLE_TRUNCATE_LEN = 50
 
@@ -46,32 +32,26 @@ def check_message_exists(slack: WebClient, channel_id: str, message_ts: str) -> 
         return False
 
 
-def send_warning(slack: WebClient, channel_id: str, message_ts: str) -> bool:
-    """スレッド返信で初回警告を送信"""
+def _send_thread_message(slack: WebClient, channel_id: str, message_ts: str, text: str, log_prefix: str) -> bool:
+    """スレッド返信でメッセージを送信"""
     try:
         slack.chat_postMessage(
             channel=channel_id,
             thread_ts=message_ts,
-            text=WARNING_MESSAGE,
+            text=text,
         )
         return True
     except SlackApiError as e:
-        logger.error("Failed to send warning (%s/%s): %s", channel_id, message_ts, e)
+        logger.error("Failed to send %s (%s/%s): %s", log_prefix, channel_id, message_ts, e)
         return False
 
 
-def send_reminder(slack: WebClient, channel_id: str, message_ts: str) -> bool:
-    """スレッド返信でリマインドを送信"""
-    try:
-        slack.chat_postMessage(
-            channel=channel_id,
-            thread_ts=message_ts,
-            text=REMINDER_MESSAGE,
-        )
-        return True
-    except SlackApiError as e:
-        logger.error("Failed to send reminder (%s/%s): %s", channel_id, message_ts, e)
-        return False
+def send_warning(slack: WebClient, channel_id: str, message_ts: str, text: str) -> bool:
+    return _send_thread_message(slack, channel_id, message_ts, text, "warning")
+
+
+def send_reminder(slack: WebClient, channel_id: str, message_ts: str, text: str) -> bool:
+    return _send_thread_message(slack, channel_id, message_ts, text, "reminder")
 
 
 def _resolve_slack_client(
@@ -85,12 +65,37 @@ def _resolve_slack_client(
     return default_client
 
 
+def _build_message(usage: str, fields: dict, notion_api_key: str = "", template_db_id: str = "") -> str:
+    """用途に応じたメッセージを組み立てる
+
+    優先順位:
+    1. Relation指定（template_page_id）→ そのテンプレート
+    2. テンプレートDB → 用途に一致するもの
+    3. フォールバック
+    """
+    template_body = resolve_template(
+        usage,
+        api_key=notion_api_key,
+        db_id=template_db_id,
+        template_page_id=fields.get("template_page_id", ""),
+    )
+    rendered = render_template(
+        template_body,
+        article=fields.get("article_id") or "",
+        post_link=fields.get("post_link") or "",
+        poster=fields.get("poster") or "",
+    )
+    return compose_message(rendered, fields.get("additional_message", ""))
+
+
 def process_reminders(
     slack: WebClient,
     notion: NotionClient,
     hours_threshold: int = 48,
     dry_run: bool = False,
     slack_clients: Optional[dict[str, WebClient]] = None,
+    notion_api_key: str = "",
+    template_db_id: str = "",
 ) -> dict[str, int]:
     """Notionポーリングによる警告・リマインド処理のメインロジック
 
@@ -104,6 +109,8 @@ def process_reminders(
         hours_threshold: 警告後何時間でリマインドするか
         dry_run: Trueの場合、実際の送信・更新をしない
         slack_clients: ワークスペース名 -> WebClient のマッピング（マルチワークスペース対応）
+        notion_api_key: テンプレートDB取得用（空ならフォールバック使用）
+        template_db_id: テンプレートDBのID（空ならフォールバック使用）
     """
     if slack_clients is None:
         slack_clients = {}
@@ -127,6 +134,12 @@ def process_reminders(
         page_id: str = fields["page_id"]
         title: str = fields["title"][:TITLE_TRUNCATE_LEN]
 
+        # 対象条文 Relation から条文名を解決（article_id より優先）
+        if fields.get("article_page_id"):
+            article_name = notion.get_article_name(fields["article_page_id"])
+            if article_name:
+                fields["article_id"] = article_name
+
         parsed = notion.parse_slack_link(fields["post_link"])
         if not parsed:
             logger.warning("[SKIP] No valid post_link: %s", title)
@@ -145,10 +158,11 @@ def process_reminders(
 
         # 警告送信日時が空 → 初回警告送信（Notion手動Approve等）
         if fields["warning_sent_at"] is None:
+            message = _build_message("警告", fields, notion_api_key, template_db_id)
             if dry_run:
                 logger.info("[DRY RUN] Would send warning: %s -> %s/%s (ws=%s)", title, channel_id, message_ts, workspace)
             else:
-                if send_warning(client, channel_id, message_ts):
+                if send_warning(client, channel_id, message_ts, message):
                     logger.info("[WARNED] Warning sent: %s (ws=%s)", title, workspace)
                     notion.update_status(page_id, "Approved", warning_sent_at=datetime.now(timezone.utc))
                 else:
@@ -163,11 +177,12 @@ def process_reminders(
             stats["skipped_not_elapsed"] += 1
             continue
 
+        message = _build_message("リマインド", fields, notion_api_key, template_db_id)
         if dry_run:
             logger.info("[DRY RUN] Would send reminder: %s -> %s/%s (ws=%s)", title, channel_id, message_ts, workspace)
             stats["reminded"] += 1
         else:
-            if send_reminder(client, channel_id, message_ts):
+            if send_reminder(client, channel_id, message_ts, message):
                 logger.info("[SENT] Reminder sent: %s (ws=%s)", title, workspace)
                 stats["reminded"] += 1
                 if not notion.mark_reminded(page_id):

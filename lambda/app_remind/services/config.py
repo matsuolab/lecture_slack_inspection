@@ -11,6 +11,7 @@ class RemindConfig:
 
     # Env Vars
     notion_db_id: str
+    template_db_id: str
     hours_threshold: int
 
 
@@ -23,5 +24,6 @@ def load_config() -> RemindConfig:
         notion_api_key=get_secret("NOTION_API_KEY_PARAM_NAME"),
 
         notion_db_id=_get_env("NOTION_DB_ID"),
+        template_db_id=_get_env("NOTION_TEMPLATE_DB_ID"),
         hours_threshold=int(_get_env("REMINDER_HOURS_THRESHOLD", "48")),
     )

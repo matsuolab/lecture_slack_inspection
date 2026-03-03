@@ -47,6 +47,8 @@ def lambda_handler(event: dict, context: Any) -> dict:
             notion=notion,
             hours_threshold=cfg.hours_threshold,
             slack_clients=workspace_clients,
+            notion_api_key=cfg.notion_api_key,
+            template_db_id=cfg.template_db_id,
         )
 
         elapsed_ms = total_timer.ms()

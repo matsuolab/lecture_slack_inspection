@@ -11,8 +11,12 @@
 repo/
 ├── infra/                 # AWS CDK (API Gateway / Lambda / IAM / etc.)
 ├── lambda/                # Lambdaのアプリコード（関数単位）
-│   ├── app_inspect/       # Slack投稿を受け取り検査（OpenAI等）→ Slack返信
-│   └── app_alert/         # 承認ボタン等を受け取り → 元投稿へ勧告通知
+│   ├── app_inspect/       # Lambda A: Slack投稿を受け取り検査（OpenAI等）→ アラート通知
+│   ├── app_alert/         # Lambda B: 承認ボタン等を受け取り → 元投稿へ警告通知
+│   ├── app_remind/        # Lambda C: Approved後48h経過した投稿にリマインド送信
+│   └── common/            # 共通モジュール（Notion, SSM, Observability）
+├── contracts/             # Lambda間データ契約（スキーマ, フィクスチャ）
+├── tests/                 # ユニットテスト
 ├── evals/                 # プロンプト評価（例: promptfoo など）
 └── prompts/               # 本番用プロンプト置き場（必要に応じて）
 
@@ -20,33 +24,46 @@ repo/
 
 
 ### infra/
-AWSインフラ定義（CDK）を置くディレクトリです。  
+AWSインフラ定義（CDK）を置くディレクトリです。
 API Gateway / Lambda / IAM 等の構成は原則ここでコード管理します。
 
 - 役割：インフラの再現性確保・変更履歴の可視化
 - 注意：AWSコンソールでの手動変更は原則禁止（緊急時のみ、後でCDKへ反映）
 
-### app/
+### lambda/
 Lambdaで動作するアプリケーションコード（Botの本体）を置くディレクトリです。
 
-#### app/handlers/
-Lambdaの「入口（エンドポイント単位）」です。  
-Slackからのリクエストを受け、署名検証・リクエスト解析・ACK返却など“薄い処理”を行い、必要に応じて `services/` を呼び出します。
+各Lambda関数は `handler.py`（エントリポイント）と `services/`（業務ロジック）で構成されます。
 
-- 例：/health、/slack/events、/slack/interactions など
-- ポイント：重い処理（OpenAI推論、Notion書き込み、Slack投稿など）はなるべく `services/` 側へ寄せる
+#### 3-Lambda アーキテクチャ
 
-#### app/services/
-業務ロジック（Botの中核処理）を置くディレクトリです。  
-違反判定（OpenAI推論）、Notionの参照/ログ保存、Slackへの投稿/スレッド返信などの処理をここにまとめます。
+```
+Slack投稿 → [Lambda A: app_inspect] → 違反検出 → Notion記録 + 管理者アラート
+                                                         ↓ ボタン操作
+                                          [Lambda B: app_alert] → 警告送信 or Dismiss
+                                                         ↓ Approved後48h経過
+                                          [Lambda C: app_remind] → 削除リマインド送信
+```
 
-- 役割：機能の中心・テストしやすい構造にするための分離
+| Lambda | トリガー | 役割 |
+|--------|---------|------|
+| **A (app_inspect)** | Slack Event API | 投稿を受信 → 3段階違反検出 → Notionログ + 管理者通知 |
+| **B (app_alert)** | Slack Interactivity | 管理者ボタン操作 → 警告送信 or Dismiss → Notion更新 |
+| **C (app_remind)** | EventBridge (定期) | Notionポーリング → 48h経過分にリマインド送信 |
+
+#### common/
+共通モジュール（全Lambda関数で共有）:
+- `notion_client.py` - Notion API操作（作成・更新・クエリ・リマインド管理）
+- `secret_manager.py` - SSM Parameter Store からシークレット取得
+- `observability.py` - 構造化ログ・CloudWatch EMFメトリクス・トレーシング
 
 ### evals/
-プロンプトの評価・改善（promptfoo等）を行うためのディレクトリです。  
-本番コード（app/）に影響を与えずに、ローカルやCIで高速にプロンプト比較・回帰テストを行います。
+プロンプトの評価・改善（promptfoo等）を行うためのディレクトリです。
 
-#### evals/prompts/
-評価対象のプロンプト案を置きます（v1/v2などを並べて比較する想定、promptfooの管理想定）。
+### contracts/
+Lambda間のデータ契約を定義:
+- `alert_button_value.schema.json` - Lambda A→B ボタン値のJSONスキーマ
+- `notion_db_schema.md` - Notion DBプロパティ定義
+- `fixtures/` - テスト用フィクスチャデータ
 
 

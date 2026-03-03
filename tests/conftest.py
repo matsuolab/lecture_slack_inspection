@@ -84,6 +84,7 @@ def mock_config(mocker):
 
     mocker.patch("app_inspect.handler.load_config", return_value=mock_conf)
     mocker.patch("app_alert.handler.load_config", return_value=mock_conf)
+    mocker.patch("app_remind.handler.load_config", return_value=mock_conf)
     return mock_conf
 
 
