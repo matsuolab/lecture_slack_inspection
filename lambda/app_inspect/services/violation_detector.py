@@ -8,12 +8,10 @@ from typing import Optional
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
-# 追加: Prompt/Schema の置き場所（data配下で統一）
 _PROMPTS_DIR = os.path.join(_DATA_DIR, "prompts")
-_JUDGE_PROMPT_PATH = os.path.join(_PROMPTS_DIR, "judge_violation.njk")
+_JUDGE_PROMPT_PATH = os.path.join(_PROMPTS_DIR, "judge_violation.txt")
 _RESPONSE_FORMAT_PATH = os.path.join(_PROMPTS_DIR, "judge_violation.response_format.json")
 
-# 追加: Lambdaのグローバルキャッシュ（同一コンテナで再利用）
 _PROMPT_TEMPLATE_CACHE: Optional[str] = None
 _RESPONSE_FORMAT_CACHE: Optional[dict] = None
 
@@ -105,7 +103,6 @@ class ViolationDetector:
             "patterns",
         )
 
-        # 追加: id<->title を持っておく（LLMがtitleを返しても補正できる）
         self._article_title_by_id = {a["id"]: a.get("article", a["id"]) for a in self.articles}
         self._article_id_by_title = {a.get("article"): a["id"] for a in self.articles if a.get("article")}
 
@@ -125,7 +122,7 @@ class ViolationDetector:
                 is_violation=True,
                 confidence=1.0,
                 method="NGワード",
-                article_id=aid,  # ← IDを返す
+                article_id=aid,
                 category=ng_match["category"],
                 reason=reason,
                 step_stopped=1,
@@ -158,7 +155,7 @@ class ViolationDetector:
             is_violation=bool(result.get("is_violation", False)),
             confidence=float(result.get("confidence", 0.0)),
             method="LLM",
-            article_id=aid,  # ← IDを返す
+            article_id=aid,
             category=result.get("category"),
             reason=reason,
             step_stopped=3,

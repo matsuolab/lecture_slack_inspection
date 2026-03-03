@@ -1,10 +1,51 @@
-- description: 個人情報（電話番号）は違反
+- description: "[違反] 条文:12.8 / 短文(15-50) / 悪意なし(無知・うっかり) / 明確な違反"
   vars:
     text: "連絡先は090-1234-5678です。"
     articles_text: |
-      - A-001: 個人情報の投稿は禁止
-      - A-010: 誹謗中傷は禁止
+      - 12.1: 第12条（便宜上の細分化）: 法令または公序良俗に違反する行為
+      - 12.8: 第12条（便宜上の細分化）: 他のユーザーに関する個人情報等を収集/蓄積/共有する行為
+      - 12.10: 第12条（便宜上の細分化）: 他ユーザー/第三者に不利益・損害・不快感を与える行為
+      - 12.12: 第12条（便宜上の細分化）: 許諾しない宣伝/広告/勧誘/営業行為（ネットワークビジネス・宗教等）
+      - 4.3: 第4条第3項：運営承認なしのメンバー間DMは原則禁止
+      - 5.3: 第5条第3項：学習/企画目的以外（勧誘・商業・政治・宗教・反社等）禁止
+    expected_is_violation: true
+    expected_violating_article: "12.8"
+    length: "短文(15-50)"
+    intent: "悪意なし(無知・うっかり)"
+    degree: "明確な違反"
+    noise: "なし"
   assert:
     - type: javascript
+      metric: overall
       value: |
-        output.is_violation === true && output.confidence >= 0.5
+        const isViolationCorrect = output.is_violation === context.vars.expected_is_violation;
+        const expectedArticle = context.vars.expected_violating_article;
+        const articleCorrect = !context.vars.expected_is_violation
+          || (expectedArticle === '' || output.article_id === expectedArticle);
+        const score = (isViolationCorrect ? 0.5 : 0) + (articleCorrect ? 0.5 : 0);
+        return {
+          pass: isViolationCorrect,
+          score: score,
+          reason: `is_violation: ${isViolationCorrect}, article_id: ${articleCorrect}`
+            + ` (expected: ${expectedArticle || 'n/a'}, got: ${output.article_id})`
+        };
+    - type: javascript
+      metric: confidence
+      weight: 0
+      value: |
+        const isViolationCorrect = output.is_violation === context.vars.expected_is_violation;
+        const confidence = output.confidence ?? 0;
+        const degree = context.vars.degree;
+        let score, reason;
+        if (isViolationCorrect) {
+          // 正解: 明確な違反は高信頼度を期待、境界事例は中程度でも許容
+          score = degree === '明確な違反'
+            ? (confidence >= 0.8 ? 1.0 : confidence >= 0.6 ? 0.7 : 0.3)
+            : (confidence >= 0.5 ? 1.0 : 0.5);
+          reason = `correct, confidence=${confidence} (${degree})`;
+        } else {
+          // 誤判定: 高信頼度は過信としてペナルティ
+          score = Math.max(0, 1.0 - confidence);
+          reason = `wrong prediction, confidence=${confidence} (overconfidence penalty)`;
+        }
+        return { pass: true, score, reason };
