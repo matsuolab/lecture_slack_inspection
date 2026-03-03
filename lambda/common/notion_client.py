@@ -13,9 +13,10 @@ _SLACK_WORKSPACE_PATTERN = re.compile(r"https://([^.]+)\.slack\.com/archives/")
 
 
 class NotionClient:
-    def __init__(self, api_key: str, db_id: str):
+    def __init__(self, api_key: str, db_id: str, articles_db_id: str = ""):
         self.api_key = api_key
         self.db_id = db_id
+        self.articles_db_id = articles_db_id
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Notion-Version": "2022-06-28",
@@ -103,6 +104,10 @@ class NotionClient:
 
         if article_id:
             props["該当条文"] = {"rich_text": [{"text": {"content": article_id}}]}
+            # 条文DBへのRelation設定（page_idが見つかった場合）
+            article_page_id = self.find_article_page_id(article_id)
+            if article_page_id:
+                props["対象条文"] = {"relation": [{"id": article_page_id}]}
 
         if confidence is not None:
             props["信頼度"] = {"number": confidence}
@@ -123,6 +128,51 @@ class NotionClient:
             return resp.json().get("id")
         except Exception as e:
             logger.error(f"Create failed: {e}")
+            return None
+
+    def find_article_page_id(self, article_id: str) -> Optional[str]:
+        """条文ID（例: "11-iv"）から条文DBのpage_idを検索する"""
+        if not self.articles_db_id or not article_id:
+            return None
+
+        url = f"{_NOTION_API_BASE}/databases/{self.articles_db_id}/query"
+        body = {
+            "filter": {
+                "property": "条文ID",
+                "title": {"equals": article_id},
+            },
+            "page_size": 1,
+        }
+
+        try:
+            resp = requests.post(url, headers=self.headers, json=body, timeout=10)
+            if not resp.ok:
+                logger.error("Article lookup failed for %s: %s", article_id, resp.status_code)
+                return None
+            results = resp.json().get("results", [])
+            return results[0]["id"] if results else None
+        except Exception as e:
+            logger.error("Article lookup failed for %s: %s", article_id, e)
+            return None
+
+    def get_article_name(self, page_id: str) -> Optional[str]:
+        """条文ページのpage_idから条文名（条項番号）を取得する"""
+        url = f"{_NOTION_API_BASE}/pages/{page_id}"
+        try:
+            resp = requests.get(url, headers=self.headers, timeout=10)
+            if not resp.ok:
+                logger.error("Article page fetch failed for %s: %s", page_id, resp.status_code)
+                return None
+            props = resp.json().get("properties", {})
+            # 条項番号（rich_text）から条文名を取得
+            article_texts = props.get("条項番号", {}).get("rich_text", [])
+            if article_texts:
+                return article_texts[0].get("plain_text")
+            # フォールバック: タイトル（条文ID）を返す
+            title_texts = props.get("条文ID", {}).get("title", [])
+            return title_texts[0].get("plain_text") if title_texts else None
+        except Exception as e:
+            logger.error("Article page fetch failed for %s: %s", page_id, e)
             return None
 
     def _update_page(self, page_id: str, props: dict[str, Any]) -> bool:
@@ -222,6 +272,17 @@ class NotionClient:
         article_texts = props.get("該当条文", {}).get("rich_text", [])
         article_id = article_texts[0]["plain_text"] if article_texts else None
 
+        additional_texts = props.get("追加メッセージ", {}).get("rich_text", [])
+        additional_message = additional_texts[0]["plain_text"] if additional_texts else ""
+
+        # Relation: 使用テンプレート（最初の1件のpage_idを取得）
+        relation_items = props.get("使用テンプレート", {}).get("relation", [])
+        template_page_id = relation_items[0]["id"] if relation_items else ""
+
+        # Relation: 対象条文（条文DBへのリンク）
+        article_relation = props.get("対象条文", {}).get("relation", [])
+        article_page_id = article_relation[0]["id"] if article_relation else ""
+
         return {
             "page_id": page["id"],
             "post_link": post_link,
@@ -229,6 +290,9 @@ class NotionClient:
             "poster": poster,
             "title": title,
             "article_id": article_id,
+            "article_page_id": article_page_id,
+            "additional_message": additional_message,
+            "template_page_id": template_page_id,
         }
 
     @staticmethod

@@ -97,7 +97,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         # 7. 外部連携
         try:
-            notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
+            notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id, cfg.notion_articles_db_id)
             slack_client = WebClient(token=cfg.slack_bot_token)
 
             # 重複チェック（同じ投稿の二重処理防止）

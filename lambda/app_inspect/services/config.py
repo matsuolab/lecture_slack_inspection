@@ -13,6 +13,7 @@ class InspectConfig:
 
     notion_api_key: str
     notion_db_id: str
+    notion_articles_db_id: str
 
     guidelines_text: str
     min_severity_to_alert: str
@@ -45,6 +46,7 @@ def load_config() -> InspectConfig:
         
         alert_private_channel_id=_get_env("ALERT_PRIVATE_CHANNEL_ID", required=True),
         notion_db_id=_get_env("NOTION_DB_ID"),
+        notion_articles_db_id=_get_env("NOTION_ARTICLES_DB_ID"),
         
         openai_model=_get_env("OPENAI_MODEL", default="gpt-4o-mini"),
         guidelines_text=_get_env("GUIDELINES_TEXT", default=""),
