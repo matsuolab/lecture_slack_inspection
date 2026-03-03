@@ -19,7 +19,6 @@ class InfraStack(Stack):
         # -----------------------------
         # 1. パラメータ定義 (SSMパラメータ名を受け取る)
         # -----------------------------
-        # Slack Bot Token (xoxb-...)
         slack_bot_token_param_name = CfnParameter(
             self,
             "SlackBotTokenParamName",
@@ -28,7 +27,6 @@ class InfraStack(Stack):
             description="SSM Parameter name for Slack Bot Token (SecureString).",
         )
 
-        # Slack Signing Secret
         slack_signing_secret_param_name = CfnParameter(
             self,
             "SlackSigningSecretParamName",
@@ -37,7 +35,6 @@ class InfraStack(Stack):
             description="SSM Parameter name for Slack Signing Secret (SecureString).",
         )
 
-        # OpenAI API Key
         openai_api_key_param_name = CfnParameter(
             self,
             "OpenAIApiKeyParamName",
@@ -46,7 +43,6 @@ class InfraStack(Stack):
             description="SSM Parameter name for OpenAI API Key (SecureString).",
         )
 
-        # Notion API Key
         notion_api_key_param_name = CfnParameter(
             self,
             "NotionApiKeyParamName",
@@ -55,7 +51,6 @@ class InfraStack(Stack):
             description="SSM Parameter name for Notion API Key (SecureString).",
         )
 
-        # 通常の環境変数パラメータ
         alert_private_channel_id = CfnParameter(
             self,
             "AlertPrivateChannelId",
@@ -75,7 +70,6 @@ class InfraStack(Stack):
         # -----------------------------
         # SecureStringはCDKデプロイ時に値を取得できないため、ARNを構築してIAM権限で使用します
         def get_param_arn(param_name: str) -> str:
-            # パラメータ名が "/" から始まる場合の処理を含める
             clean_name = param_name if not param_name.startswith("/") else param_name[1:]
             return f"arn:aws:ssm:{self.region}:{self.account}:parameter/{clean_name}"
 
@@ -87,22 +81,19 @@ class InfraStack(Stack):
             "LambdaA_AppInspect",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                # 不要な app_alert 等を除外してイメージを軽量化
-                exclude=["app_alert", "app_alert/**", "tests", "contracts"],
+                exclude=["app_alert"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
-                # シークレットは値ではなく「パラメータ名」を渡す
                 "SLACK_BOT_TOKEN_PARAM_NAME": slack_bot_token_param_name.value_as_string,
                 "SLACK_SIGNING_SECRET_PARAM_NAME": slack_signing_secret_param_name.value_as_string,
                 "OPENAI_API_KEY_PARAM_NAME": openai_api_key_param_name.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
-                # 通常の値
                 "ALERT_PRIVATE_CHANNEL_ID": alert_private_channel_id.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
-                # モックモード有効化 (OpenAI APIを呼ばずにテスト)
+                # TODO: 結合テスト時には無効化
                 "USE_MOCK_OPENAI": "true",
             },
         )
@@ -121,8 +112,7 @@ class InfraStack(Stack):
             "LambdaB_AppAlert",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                # 不要な app_inspect 等を除外
-                exclude=["app_inspect", "app_inspect/**", "tests", "contracts"],
+                exclude=["app_inspect"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -144,17 +134,7 @@ class InfraStack(Stack):
         # -----------------------------
         # 5. IAM権限付与 (SSM Parameter Store)
         # -----------------------------
-        # 特定のパラメータのみ読み取りを許可するポリシー
-        # ssm_policy_statement = iam.PolicyStatement(
-        #     actions=["ssm:GetParameter"],
-        #     resources=[
-        #         get_param_arn(slack_bot_token_param_name.value_as_string),
-        #         get_param_arn(slack_signing_secret_param_name.value_as_string),
-        #         get_param_arn(openai_api_key_param_name.value_as_string),
-        #         get_param_arn(notion_api_key_param_name.value_as_string),
-        #     ]
-        # )
-        # 一時的な切り分け用: 全てのSSMパラメータを許可
+        # TODO: 最小権限の原則に基づき、必要なパラメータARNのみを許可するように改善
         ssm_policy_statement = iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter/*"]

@@ -1,52 +1,43 @@
 name: Manual Deploy (CD)
 
 on:
-  workflow_dispatch: # 手動トリガー (ボタンで実行)
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./infra # CDKのプロジェクトがあるディレクトリ
+        working-directory: ./infra
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Pythonのセットアップ
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
 
-      # Node.jsのセットアップ (CDKコマンド用)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      # 依存関係のインストール
       - name: Install Dependencies
         run: |
           pip install -r requirements.txt
-          npm install -g aws-cdk
 
-      # AWS認証情報の設定
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-1 # 東京リージョン
+          aws-region: ap-northeast-1
 
-      # デプロイ実行
       - name: CDK Deploy
-        env:
-          # 確認プロンプトを出さない設定
-          CDK_REQUIRE_APPROVAL: never
         run: |
-          cdk deploy --all --require-approval never \
+          npx aws-cdk@2 deploy --all --require-approval never \
             --parameters AlertPrivateChannelId="${{ secrets.ALERT_CHANNEL_ID }}" \
             --parameters NotionDbId="${{ secrets.NOTION_DB_ID }}"

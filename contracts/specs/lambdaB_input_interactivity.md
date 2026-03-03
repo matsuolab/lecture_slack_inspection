@@ -30,7 +30,7 @@ API Gateway 経由で Slack から送られる Interactivity を受信。
 - `origin_channel`
 - `origin_ts`
 
-value(JSON)の仕様は `lambda/contracts/alert_button_value.schema.json` に準拠。
+value(JSON)の仕様は `contracts/schemas/alert_button_value.schema.json` に準拠。
 
 ---
 

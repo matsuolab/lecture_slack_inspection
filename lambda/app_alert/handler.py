@@ -14,9 +14,9 @@ from .services.actions import parse_action_context, handle_approve_violation, ha
 SERVICE = "app_alert"
 
 def lambda_handler(event: dict, context: Any) -> dict:
-    ctx = build_context(event, context, service=SERVICE)
+    context = build_context(event, context, service=SERVICE)
     total_timer = Timer()
-    log_info(ctx, action="request_received")
+    log_info(context, action="request_received")
 
     try:
         cfg = load_config()
@@ -35,17 +35,17 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 payload = json.loads(decoded["payload"][0])
             else:
                 payload = json.loads(raw_body)
-            log_info(ctx, action="parse_payload", result="success")
+            log_info(context, action="parse_payload", result="success")
         except Exception as e:
-            log_error(ctx, action="parse_payload", error=e)
+            log_error(context, action="parse_payload", error=e)
             return {"statusCode": 400, "body": "Bad Request"}
 
         if not verifier.is_valid_request(raw_body, headers):
-            log_info(ctx, action="verify_signature", result="fail")
+            log_info(context, action="verify_signature", result="fail")
             return {"statusCode": 401, "body": "Invalid signature"}
 
         # 2. コンテキスト解析
-        action_ctx = parse_action_context(payload)
+        action_context = parse_action_context(payload)
 
         # 対応者（ボタン押下者）
         responder_id = None
@@ -53,12 +53,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
         if isinstance(user_info, dict):
             responder_id = user_info.get("id")
 
-        if not action_ctx or not action_ctx.action_id:
-            log_info(ctx, action="ignore_action", reason="no_action_id")
+        if not action_context or not action_context.action_id:
+            log_info(context, action="ignore_action", reason="no_action_id")
             return {"statusCode": 200, "body": "OK"}
 
-        if action_ctx.action_id not in ("approve_violation", "dismiss_violation"):
-            log_info(ctx, action="ignore_action", action_id=action_ctx.action_id)
+        if action_context.action_id not in ("approve_violation", "dismiss_violation"):
+            log_info(context, action="ignore_action", action_id=action_context.action_id)
             return {"statusCode": 200, "body": "OK"}
 
         # 3. クライアント初期化
@@ -67,37 +67,37 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         success = False
         
-        page_id = action_ctx.value.get("notion_page_id")
+        page_id = action_context.value.get("notion_page_id")
 
-        if action_ctx.action_id == "approve_violation":
-            log_info(ctx, action="exec_approve", page_id=page_id)
+        if action_context.action_id == "approve_violation":
+            log_info(context, action="exec_approve", page_id=page_id)
             
             success = handle_approve_violation(
-                ctx=action_ctx,
+                context=action_context,
                 slack=slack,
                 notion=notion,
                 reply_text=cfg.reply_prefix,
                 responder_id=responder_id,
             )
 
-        elif action_ctx.action_id == "dismiss_violation":
-            log_info(ctx, action="exec_dismiss", page_id=page_id)
+        elif action_context.action_id == "dismiss_violation":
+            log_info(context, action="exec_dismiss", page_id=page_id)
 
             success = handle_dismiss_violation(
-                ctx=action_ctx,
+                context=action_context,
                 slack=slack,
                 notion=notion,
                 responder_id=responder_id,
             )
 
         if success:
-            emit_metric(ctx, "ActionSuccess", 1)
+            emit_metric(context, "ActionSuccess", 1)
             return {"statusCode": 200, "body": "OK"}
         else:
-            emit_metric(ctx, "ActionFailed", 1)
+            emit_metric(context, "ActionFailed", 1)
             return {"statusCode": 200, "body": "Action Failed"}
 
     except Exception as e:
-        log_error(ctx, action="handler_failed", error=e)
-        emit_metric(ctx, "AlertActionError", 1)
+        log_error(context, action="handler_failed", error=e)
+        emit_metric(context, "AlertActionError", 1)
         return {"statusCode": 200, "body": "error_handled"}

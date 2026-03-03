@@ -1,52 +1,68 @@
 ## Repository Structure（ディレクトリ構成）
 
-## セットアップ
-
-インフラ（AWS CDK）のセットアップ手順は [infra/README.md](infra/README.md) に記載しています。
-
-
-本リポジトリは「アプリコード」と「インフラコード」を分離しています。（※必要に応じて随時更新）
-
 ```text
 repo/
-├── infra/                 # AWS CDK (API Gateway / Lambda / IAM / etc.)
-├── lambda/                # Lambdaのアプリコード（関数単位）
-│   ├── app_inspect/       # Slack投稿を受け取り検査（OpenAI等）→ Slack返信
-│   └── app_alert/         # 承認ボタン等を受け取り → 元投稿へ勧告通知
+├── contracts/             # API仕様やスキーマ、テスト用データ
+│   ├── specs/             # Markdown形式の仕様書
+│   ├── schemas/           # JSONスキーマ
+│   └── fixtures/          # テスト用フィクスチャ
 ├── evals/                 # プロンプト評価（例: promptfoo など）
-└── prompts/               # 本番用プロンプト置き場（必要に応じて）
+│   └── promptfoo/         # promptfoo設定・テストケース（本番プロンプトを直接参照）
+├── infra/                 # AWS CDK (API Gateway / Lambda / IAM / etc.)
+│   ├── stacks/            # CDKスタック定義
+│   └── tests/             # インフラコードのテスト
+├── lambda/                # Lambdaのアプリコード（関数単位）
+│   ├── app_alert/         # 承認ボタン等を受け取り → 元投稿へ勧告通知
+│   │   ├── handler.py     # Lambdaエントリーポイント
+│   │   ├── services/      # 業務ロジック（Slack通知など）
+│   │   └── components/    # 再利用可能なコンポーネント（Slackフォーマットなど）
+│   ├── app_inspect/       # Slack投稿を受け取り検査（OpenAI等）→ Slack返信
+│   │   ├── handler.py     # Lambdaエントリーポイント
+│   │   ├── services/      # 業務ロジック（違反判定など）
+│   │   └── components/    # 再利用可能なコンポーネント（違反フォーマットなど）
+│   └── common/            # 共通モジュール（Notionクライアント等）
+├── prompts/               # 本番用プロンプト置き場（必要に応じて）
+├── tests/                 # アプリケーションコードのテスト
+│   ├── conftest.py        # テスト設定・共通フィクスチャー
+│   ├── unit/              # ユニットテスト（各Lambdaの単体検証）
+│   └── integration/       # 統合テスト（Lambda間の連携・契約検証）
+└── README.md              # プロジェクト概要
+```
 
-
-
-
-### infra/
-AWSインフラ定義（CDK）を置くディレクトリです。  
-API Gateway / Lambda / IAM 等の構成は原則ここでコード管理します。
-
-- 役割：インフラの再現性確保・変更履歴の可視化
-- 注意：AWSコンソールでの手動変更は原則禁止（緊急時のみ、後でCDKへ反映）
-
-### app/
-Lambdaで動作するアプリケーションコード（Botの本体）を置くディレクトリです。
-
-#### app/handlers/
-Lambdaの「入口（エンドポイント単位）」です。  
-Slackからのリクエストを受け、署名検証・リクエスト解析・ACK返却など“薄い処理”を行い、必要に応じて `services/` を呼び出します。
-
-- 例：/health、/slack/events、/slack/interactions など
-- ポイント：重い処理（OpenAI推論、Notion書き込み、Slack投稿など）はなるべく `services/` 側へ寄せる
-
-#### app/services/
-業務ロジック（Botの中核処理）を置くディレクトリです。  
-違反判定（OpenAI推論）、Notionの参照/ログ保存、Slackへの投稿/スレッド返信などの処理をここにまとめます。
-
-- 役割：機能の中心・テストしやすい構造にするための分離
+### contracts/
+API仕様やスキーマ、テスト用データを管理するディレクトリです。
+- `specs/`: Markdown形式の仕様書を配置します。
+- `schemas/`: JSONスキーマを配置します。
+- `fixtures/`: テスト用のデータを配置します。
 
 ### evals/
-プロンプトの評価・改善（promptfoo等）を行うためのディレクトリです。  
-本番コード（app/）に影響を与えずに、ローカルやCIで高速にプロンプト比較・回帰テストを行います。
+プロンプト評価・改善（promptfoo等）を行うためのディレクトリです。
+- `promptfoo/`: promptfooの設定ファイルとテストケースを配置します。評価には本番プロンプト（`lambda/app_inspect/services/data/prompts/`）を直接参照します。
 
-#### evals/prompts/
-評価対象のプロンプト案を置きます（v1/v2などを並べて比較する想定、promptfooの管理想定）。
+### infra/
+AWSインフラ定義（CDK）を置くディレクトリです。
+- `stacks/`: CDKスタック定義（API Gateway / Lambda / IAM 等）を管理します。
+- `tests/`: インフラコードのテストを配置します。
+
+### lambda/
+Lambdaで動作するアプリケーションコード（Botの本体）を置くディレクトリです。
+- `app_alert/`: 承認ボタン等を受け取り、元投稿へ勧告通知を行う処理を管理します。
+  - `handler.py`: Lambdaエントリーポイント。
+  - `services/`: 業務ロジック（Slack通知など）を管理します。
+  - `components/`: 再利用可能なコンポーネント（Slackフォーマットなど）を管理します。
+- `app_inspect/`: Slack投稿を受け取り、検査（OpenAI等）を行い、Slackへ返信する処理を管理します。
+  - `handler.py`: Lambdaエントリーポイント。
+  - `services/`: 業務ロジック（違反判定など）を管理します。
+  - `components/`: 再利用可能なコンポーネント（違反フォーマットなど）を管理します。
+- `common/`: Notionクライアントや共通のロジックを管理します。
+
+### prompts/
+本番用プロンプトを配置するディレクトリです。必要に応じて使用します。
+
+### tests/
+アプリケーションコードのテストを管理するディレクトリです。
+- `conftest.py`: テスト設定・共通フィクスチャーを記述します。
+- `unit/`: 各Lambdaのユニットテストを配置します。
+- `integration/`: Lambda間の連携・契約検証を行う統合テストを配置します。
 
 

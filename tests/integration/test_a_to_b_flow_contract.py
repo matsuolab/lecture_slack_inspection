@@ -1,5 +1,4 @@
 import json
-import urllib.parse
 import pytest
 from unittest.mock import MagicMock
 
@@ -18,17 +17,8 @@ def _find_button_by_action_id(blocks: list, action_id: str) -> dict:
     raise AssertionError(f"button not found: action_id={action_id}")
 
 
-def _to_apigw_form_event(payload: dict) -> dict:
-    body_str = "payload=" + urllib.parse.quote(json.dumps(payload))
-    return {
-        "body": body_str,
-        "headers": {"content-type": "application/x-www-form-urlencoded"},
-        "isBase64Encoded": False,
-    }
-
-
 def test_A_to_B_flow_dismiss_updates_notion(
-    load_contract_fixture, alert_button_value_schema, mock_external_services, mock_config, mocker
+    load_contract_fixture, alert_button_value_schema, mock_external_services, mock_config, mocker, to_apigw_form_event
 ):
     # 共通：署名はユニットなのでOK扱い
     mock_external_services["signature"].is_valid_request.return_value = True
@@ -79,7 +69,7 @@ def test_A_to_B_flow_dismiss_updates_notion(
     payloadB["container"]["channel_id"] = "C_PRIVATE"
     payloadB["container"]["message_ts"] = "1700000001.00001"
 
-    eventB = _to_apigw_form_event(payloadB)
+    eventB = to_apigw_form_event(payloadB)
 
     # 3) B handler 実行
     respB = lambdaB(eventB, {})

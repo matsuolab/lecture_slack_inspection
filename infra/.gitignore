@@ -10,3 +10,4 @@ __pycache__
 cdk.out
 
 source.bat
+.DS_Store

@@ -18,7 +18,7 @@
 - `dismiss_violation`(違反投稿ではないとして運営側に承認された)
 
 ### value（固定：JSON文字列）
-- `lambda/contracts/alert_button_value.schema.json` に準拠
+- `contracts/schemas/alert_button_value.schema.json` に準拠
 - 最低限 MUST:
   - `trace_id`
   - `origin_channel`

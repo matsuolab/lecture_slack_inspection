@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import parse_qs
 
-STAGE = os.getenv("STAGE", "dev")  # dev/stg/prod
 METRICS_NAMESPACE = os.getenv("METRICS_NAMESPACE", "SlackModerationBot")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
@@ -60,15 +59,14 @@ def _lower_headers(headers: Optional[Dict[str, Any]]) -> Dict[str, str]:
     return {str(k).lower(): str(v) for k, v in headers.items() if k is not None}
 
 
-# ---- Slack event parsing (best-effort) ----
+# ---- Slackイベントのパース ----
 def parse_apigw_body(event: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
-    Returns (event_api_json, interactivity_payload_json).
-    Supports:
-      - API Gateway proxy event: headers + body
-      - direct Slack JSON (local tests)
+    (event_api_json, interactivity_payload_json) のタプルを返す。
+    対応形式:
+      - API Gateway プロキシイベント: headers + body
+      - Slack JSON を直接受け取る形式（ローカルテスト用）
     """
-    # Already Slack JSON (local tests etc.)
     if "body" not in event and ("event_id" in event or event.get("type") in ("event_callback", "url_verification")):
         return event, None
 
@@ -87,7 +85,6 @@ def parse_apigw_body(event: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], O
     headers = _lower_headers(event.get("headers"))
     content_type = headers.get("content-type", "")
 
-    # Slack Event API: application/json
     if "application/json" in content_type:
         try:
             j = json.loads(body_str)
@@ -96,7 +93,6 @@ def parse_apigw_body(event: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], O
         except Exception:
             return None, None
 
-    # Slack Interactivity: x-www-form-urlencoded payload=JSON
     if "application/x-www-form-urlencoded" in content_type or "payload=" in body_str:
         try:
             qs = parse_qs(body_str)
@@ -107,7 +103,6 @@ def parse_apigw_body(event: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], O
         except Exception:
             return None, None
 
-    # Fallback: try JSON
     try:
         j = json.loads(body_str)
         if "event_id" in j or j.get("type") in ("event_callback", "url_verification"):
@@ -169,11 +164,9 @@ def extract_from_interactivity(payload: Dict[str, Any]) -> Tuple[Optional[str], 
     return trace_id, team_id, channel_id, message_ts, action_id
 
 
-# ---- Context ----
 @dataclass(frozen=True)
 class ObsContext:
     service: str
-    env: str
     trace_id: str
     request_id: Optional[str]
     function_name: Optional[str]
@@ -216,7 +209,6 @@ def build_context(event: Dict[str, Any], aws_context: Any, service: str) -> ObsC
 
     return ObsContext(
         service=service,
-        env=STAGE,
         trace_id=trace_id,
         request_id=getattr(aws_context, "aws_request_id", None),
         function_name=getattr(aws_context, "function_name", None),
@@ -228,26 +220,24 @@ def build_context(event: Dict[str, Any], aws_context: Any, service: str) -> ObsC
     )
 
 
-# ---- Logging ----
-def log(level: str, ctx: ObsContext, action: str, result: str, **fields: Any) -> None:
+def log(level: str, context: ObsContext, action: str, result: str, **fields: Any) -> None:
     if not _should_log(level):
         return
 
     payload: Dict[str, Any] = {
         "ts": _now_iso(),
         "level": level,
-        "service": ctx.service,
-        "env": ctx.env,
-        "trace_id": ctx.trace_id,
+        "service": context.service,
+        "trace_id": context.trace_id,
         "action": action,
         "result": result,
-        "request_id": ctx.request_id,
-        "function_name": ctx.function_name,
-        "slack_event_id": ctx.slack_event_id,
-        "slack_team_id": ctx.slack_team_id,
-        "slack_channel_id": ctx.slack_channel_id,
-        "slack_message_ts": ctx.slack_message_ts,
-        "slack_action_id": ctx.slack_action_id,
+        "request_id": context.request_id,
+        "function_name": context.function_name,
+        "slack_event_id": context.slack_event_id,
+        "slack_team_id": context.slack_team_id,
+        "slack_channel_id": context.slack_channel_id,
+        "slack_message_ts": context.slack_message_ts,
+        "slack_action_id": context.slack_action_id,
     }
 
     for k, v in fields.items():
@@ -255,26 +245,25 @@ def log(level: str, ctx: ObsContext, action: str, result: str, **fields: Any) ->
 
     _json_print(payload)
 
-def log_info(ctx: ObsContext, action: str, result: str = "success", **fields: Any) -> None:
-    log("INFO", ctx, action, result, **fields)
+def log_info(context: ObsContext, action: str, result: str = "success", **fields: Any) -> None:
+    log("INFO", context, action, result, **fields)
 
-def log_warn(ctx: ObsContext, action: str, result: str = "fail", **fields: Any) -> None:
-    log("WARN", ctx, action, result, **fields)
+def log_warn(context: ObsContext, action: str, result: str = "fail", **fields: Any) -> None:
+    log("WARN", context, action, result, **fields)
 
-def log_error(ctx: ObsContext, action: str, error: Exception, result: str = "fail", **fields: Any) -> None:
-    log("ERROR", ctx, action, result, error_type=type(error).__name__, error_message=_truncate_str(str(error), 800), **fields)
+def log_error(context: ObsContext, action: str, error: Exception, result: str = "fail", **fields: Any) -> None:
+    log("ERROR", context, action, result, error_type=type(error).__name__, error_message=_truncate_str(str(error), 800), **fields)
 
 
-# ---- Metrics (CloudWatch EMF) ----
 def emit_metric(
-    ctx: ObsContext,
+    context: ObsContext,
     name: str,
     value: float = 1.0,
     unit: str = "Count",
     dimensions: Optional[Dict[str, str]] = None,
     namespace: str = METRICS_NAMESPACE,
 ) -> None:
-    dims = dimensions or {"service": ctx.service, "env": ctx.env}
+    dims = dimensions or {"service": context.service}
     emf: Dict[str, Any] = {
         "_aws": {
             "Timestamp": int(time.time() * 1000),
@@ -288,7 +277,7 @@ def emit_metric(
         },
         **dims,
         name: value,
-        "trace_id": ctx.trace_id,
+        "trace_id": context.trace_id,
     }
     _json_print(emf)
 
