@@ -76,11 +76,8 @@ class NotionClient:
             return None
 
         # タイトルにmessage_tsを含めて重複チェック可能に
-        content_preview = post_content[:80]
-        if message_ts:
-            title = f"{message_ts}: {content_preview}"
-        else:
-            title = content_preview[:100]
+        # 余計な条件分岐と message_ts の結合を削除し、純粋に本文だけをセットする
+        title = post_content[:100]
 
         props: dict[str, Any] = {
             "投稿内容": {"title": [{"text": {"content": title[:200]}}]},
