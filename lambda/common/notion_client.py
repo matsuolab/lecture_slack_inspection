@@ -47,9 +47,9 @@ class NotionClient:
             return False
         try:
             results = self._query({
-                "property": "投稿内容",
-                "title": {"starts_with": f"{message_ts}:"}
-            })
+            "property": "Message_TS",
+            "rich_text": {"equals": message_ts}
+        })
             return len(results) > 0
         except Exception as e:
             logger.error(f"Duplicate check failed: {e}")
@@ -78,7 +78,7 @@ class NotionClient:
         # タイトルにmessage_tsを含めて重複チェック可能に
         content_preview = post_content[:80]
         if message_ts:
-            title = f"{message_ts}: {content_preview}"
+            props["Message_TS"] = {"rich_text": [{"text": {"content": message_ts}}]}
         else:
             title = content_preview[:100]
 

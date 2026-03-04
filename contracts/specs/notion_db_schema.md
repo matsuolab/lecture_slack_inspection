@@ -30,6 +30,8 @@ Slack監視Botが違反投稿を記録・管理するためのNotionデータベ
 | **リマインド送信済** | Checkbox     | NO   | 削除依頼リマインド送信後にtrueにする。<br>Lambda C（将来実装）用。                   | -                                                                                                 |
 | **違反理由**         | RichText     | NO   | 違反と判定された理由の詳細（AIの出力）。                                             | -                                                                                                 |
 | **違反カテゴリ**     | Multi-select | NO   | 該当する違反のカテゴリ。                                                             | -                                                                                                 |
+| **Message_TS**       | RichText     | NO   | 重複チェック用のSlackタイムスタンプ                                                  | -                                                                                                 |
+|  |
 | **重大度**           | Select       | NO   | 違反の重大度。                                                                       | **Options**:<br>- `low`<br>- `medium`<br>- `high`                                                 |
 
     - **Write**: Lambda A (app_inspect) - 新規作成
