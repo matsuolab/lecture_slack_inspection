@@ -192,13 +192,17 @@ def handle_dismiss_violation(
     slack: "WebClient",
     notion: "NotionClient",
     responder_id: str | None = None,
+    responder_name: str | None = None,
 ) -> bool:
     notion_page_id = context.value.get("notion_page_id")
 
     try:
         if notion_page_id:
             update_kwargs: dict[str, Any] = {}
-            if responder_id:
+            # NotionへはSlackのIDではなく、表示名（responder_name）を渡す
+            if responder_name:
+                update_kwargs["responder_id"] = responder_name
+            elif responder_id:
                 update_kwargs["responder_id"] = responder_id
             notion.update_status(notion_page_id, "Dismissed", **update_kwargs)
             logger.info(f"Updated Notion {notion_page_id} to Dismissed")
