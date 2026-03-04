@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from slack_sdk import WebClient
     from common.notion_client import NotionClient
 
+from common.template_manager import resolve_template, render_template
+
 logger = logging.getLogger(__name__)
 
 _ARTICLES_DIR = os.path.join(
@@ -47,6 +49,15 @@ def parse_action_context(payload: dict) -> ActionContext | None:
         admin_channel=container.get("channel_id"),
         admin_message_ts=container.get("message_ts"),
     )
+
+
+def extract_template_page_id(payload: dict) -> str:
+    """Slackペイロードのstate.valuesからテンプレート選択値を取得"""
+    state_values = payload.get("state", {}).get("values", {})
+    select_block = state_values.get("template_select_block", {})
+    select_action = select_block.get("template_select", {})
+    selected = select_action.get("selected_option")
+    return selected["value"] if selected else ""
 
 
 def _load_articles() -> dict[str, dict]:
@@ -91,6 +102,9 @@ def handle_approve_violation(
     notion: "NotionClient",
     reply_text: str,
     responder_id: str | None = None,
+    template_page_id: str = "",
+    notion_api_key: str = "",
+    template_db_id: str = "",
 ) -> bool:
     origin_channel = ctx.value.get("origin_channel")
     origin_ts = ctx.value.get("origin_ts")
@@ -101,7 +115,25 @@ def handle_approve_violation(
         logger.error("Missing origin info for approve action")
         return False
 
-    warning_text = build_warning_text(reply_text, article_id)
+    # テンプレートDB連携: template_page_idがあればテンプレート解決を使用
+    if template_page_id and notion_api_key:
+        template_body = resolve_template(
+            "警告",
+            api_key=notion_api_key,
+            db_id=template_db_id,
+            template_page_id=template_page_id,
+        )
+        # 条文名を解決（article_idからNotionの条文マスタを参照）
+        article_name = article_id or ""
+        if article_id:
+            article_page_id = notion.find_article_page_id(article_id)
+            if article_page_id:
+                resolved_name = notion.get_article_name(article_page_id)
+                if resolved_name:
+                    article_name = resolved_name
+        warning_text = render_template(template_body, article=article_name)
+    else:
+        warning_text = build_warning_text(reply_text, article_id)
 
     try:
         slack.chat_postMessage(
@@ -117,6 +149,8 @@ def handle_approve_violation(
             if responder_id:
                 update_kwargs["responder_id"] = responder_id
             notion.update_status(notion_page_id, "Approved", **update_kwargs)
+            if template_page_id:
+                notion.set_template_relation(notion_page_id, template_page_id)
             logger.info(f"Updated Notion {notion_page_id} to Approved")
 
         if ctx.admin_channel and ctx.admin_message_ts:

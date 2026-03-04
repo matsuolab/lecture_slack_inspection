@@ -8,11 +8,44 @@ from openai import OpenAI
 # commonモジュールのインポート
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
+from common.template_manager import get_template_options
 from .services.config import load_config
 from .services.moderation import run_moderation, encode_alert_button_value
 from .services.models import severity_rank, ModerationResult
 
 SERVICE = "app_inspect"
+
+
+def _build_template_select_block(
+    api_key: str, db_id: str,
+) -> dict | None:
+    """テンプレートDBからstatic_selectブロックを構築。取得失敗時はNone。"""
+    templates = get_template_options(api_key, db_id)
+    if not templates:
+        return None
+
+    options = [
+        {"text": {"type": "plain_text", "text": t["name"][:75]}, "value": t["page_id"]}
+        for t in templates
+    ]
+    select_element: dict = {
+        "type": "static_select",
+        "action_id": "template_select",
+        "placeholder": {"type": "plain_text", "text": "テンプレート選択"},
+        "options": options,
+    }
+    default = next((t for t in templates if t["usage"] == "警告"), None)
+    if default:
+        select_element["initial_option"] = {
+            "text": {"type": "plain_text", "text": default["name"][:75]},
+            "value": default["page_id"],
+        }
+    return {
+        "type": "actions",
+        "block_id": "template_select_block",
+        "elements": [select_element],
+    }
+
 
 def lambda_handler(event: dict, context: Any) -> dict:
     # 1. コンテキスト初期化（この時点でSlackのIDなどが自動抽出される）
@@ -151,25 +184,35 @@ def lambda_handler(event: dict, context: Any) -> dict:
                     ),
                 },
             },
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "削除勧告を送る"},
-                        "style": "danger",
-                        "action_id": "approve_violation",
-                        "value": button_value,
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Dismiss（対応不要）"},
-                        "action_id": "dismiss_violation",
-                        "value": button_value,
-                    },
-                ],
-            },
         ]
+
+        # テンプレート選択プルダウン（テンプレートDBが設定されている場合のみ）
+        if cfg.notion_template_db_id:
+            try:
+                select_block = _build_template_select_block(cfg.notion_api_key, cfg.notion_template_db_id)
+                if select_block:
+                    blocks.append(select_block)
+            except Exception as e:
+                log_error(ctx, action="fetch_templates", error=e)
+
+        blocks.append({
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "削除勧告を送る"},
+                    "style": "danger",
+                    "action_id": "approve_violation",
+                    "value": button_value,
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Dismiss（対応不要）"},
+                    "action_id": "dismiss_violation",
+                    "value": button_value,
+                },
+            ],
+        })
 
         slack_client.chat_postMessage(channel=cfg.alert_private_channel_id, text="【違反検知アラート】", blocks=blocks)
 

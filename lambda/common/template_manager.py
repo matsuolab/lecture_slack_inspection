@@ -106,6 +106,31 @@ def get_templates(api_key: str, db_id: str, force_refresh: bool = False) -> dict
         return {}
 
 
+def get_template_options(api_key: str, db_id: str) -> list[dict[str, str]]:
+    """Slack static_select用: 有効な全テンプレートを page_id 付きで返す
+
+    Returns:
+        [{"page_id": "...", "name": "標準警告", "usage": "警告"}, ...]
+    """
+    if not db_id:
+        return []
+    try:
+        pages = _fetch_templates(api_key, db_id)
+        options = []
+        for page in pages:
+            parsed = _parse_template(page)
+            if parsed:
+                options.append({
+                    "page_id": page["id"],
+                    "name": parsed["name"],
+                    "usage": parsed["usage"],
+                })
+        return options
+    except Exception as e:
+        logger.error("Failed to fetch template options: %s", e)
+        return []
+
+
 def get_template_by_page_id(api_key: str, page_id: str) -> Optional[str]:
     """Relation指定されたテンプレートのpage_idから本文を取得"""
     headers = {

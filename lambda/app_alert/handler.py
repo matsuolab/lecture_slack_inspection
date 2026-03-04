@@ -1,6 +1,5 @@
 import json
 import base64
-import os
 from typing import Any
 from urllib.parse import parse_qs
 from slack_sdk import WebClient
@@ -9,7 +8,7 @@ from slack_sdk.signature import SignatureVerifier
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
 from .services.config import load_config
-from .services.actions import parse_action_context, handle_approve_violation, handle_dismiss_violation
+from .services.actions import parse_action_context, extract_template_page_id, handle_approve_violation, handle_dismiss_violation
 
 SERVICE = "app_alert"
 
@@ -71,13 +70,18 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         if action_ctx.action_id == "approve_violation":
             log_info(ctx, action="exec_approve", page_id=page_id)
-            
+
+            template_page_id = extract_template_page_id(payload)
+
             success = handle_approve_violation(
                 ctx=action_ctx,
                 slack=slack,
                 notion=notion,
                 reply_text=cfg.reply_prefix,
                 responder_id=responder_id,
+                template_page_id=template_page_id,
+                notion_api_key=cfg.notion_api_key,
+                template_db_id=cfg.notion_template_db_id,
             )
 
         elif action_ctx.action_id == "dismiss_violation":

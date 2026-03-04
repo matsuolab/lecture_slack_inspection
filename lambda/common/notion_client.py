@@ -219,6 +219,12 @@ class NotionClient:
             ]
         })
 
+    def set_template_relation(self, page_id: str, template_page_id: str) -> bool:
+        """使用テンプレートRelationを設定"""
+        return self._update_page(page_id, {
+            "使用テンプレート": {"relation": [{"id": template_page_id}]},
+        })
+
     def mark_reminded(self, page_id: str) -> bool:
         """リマインド送信済フラグを True に更新"""
         return self._update_page(page_id, {"リマインド送信済": {"checkbox": True}})
