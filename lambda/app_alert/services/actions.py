@@ -134,6 +134,7 @@ def handle_approve_violation(
     notion: "NotionClient",
     reply_text: str,
     responder_id: str | None = None,
+    responder_name: str | None = None,
 ) -> bool:
     origin_channel = context.value.get("origin_channel")
     origin_ts = context.value.get("origin_ts")
@@ -157,8 +158,10 @@ def handle_approve_violation(
         if notion_page_id:
             update_kwargs: dict[str, Any] = {}
             update_kwargs["warning_sent_at"] = datetime.now()  # 既存挙動のまま
-            if responder_id:
-                update_kwargs["responder_id"] = responder_id
+            if responder_name:
+                update_kwargs["responder_id"] = responder_name
+            elif responder_id:
+                update_kwargs["responder_id"] = responder_id # 万が一名前が取れなかった時の保険
             notion.update_status(notion_page_id, "Approved", **update_kwargs)
             logger.info(f"Updated Notion {notion_page_id} to Approved")
 
