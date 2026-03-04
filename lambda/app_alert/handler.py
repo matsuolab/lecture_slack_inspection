@@ -49,9 +49,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         # 対応者（ボタン押下者）
         responder_id = None
+        responder_name = None  # Notion記録用の名前を格納する変数
         user_info = payload.get("user")
         if isinstance(user_info, dict):
             responder_id = user_info.get("id")
+            # Slackのペイロードからユーザー名を抽出。取得できない場合の保険としてIDを入れる
+            responder_name = user_info.get("name") or user_info.get("username") or responder_id
 
         if not action_context or not action_context.action_id:
             log_info(context, action="ignore_action", reason="no_action_id")
@@ -78,6 +81,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 notion=notion,
                 reply_text=cfg.reply_prefix,
                 responder_id=responder_id,
+                responder_name=responder_name,
             )
 
         elif action_context.action_id == "dismiss_violation":
@@ -88,6 +92,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 slack=slack,
                 notion=notion,
                 responder_id=responder_id,
+                responder_name=responder_name,
             )
 
         if success:
