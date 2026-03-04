@@ -7,12 +7,14 @@ providers:
       response_format: file://../../lambda/app_inspect/services/data/prompts/judge_violation.response_format.json
 
 prompts:
-  - label: judge_violation
-    file: file://../../lambda/app_inspect/services/data/prompts/judge_violation.njk
+  - id: file://../../lambda/app_inspect/services/data/prompts/judge_violation.txt
+    label: judge_violation
 
 defaultTest:
   options:
     transform: JSON.parse(output)
 
 tests:
-  - file://testcases.yml
+  - file://testcases.yml # サンプルテストケース
+  - file://datasets/testcases_preview.yaml # 評価データセット（先頭5件のプレビュー）
+  # - file://datasets/testcases.yaml # 全件評価（4968件）

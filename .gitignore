@@ -9,9 +9,12 @@ node_modules/
 # Env
 .env
 .env.*
+!.env.sample
 
 # CDK
 cdk.out/
 
 .pytest_cache/
-.DS_Store
+
+# Eval datasets (managed externally via Google Drive, not Git)
+evals/promptfoo/datasets/
