@@ -47,9 +47,9 @@ class NotionClient:
             return False
         try:
             results = self._query({
-            "property": "Message_TS",
-            "rich_text": {"equals": message_ts}
-        })
+                "property": "Message_TS",
+                "rich_text": {"equals": message_ts}
+            })
             return len(results) > 0
         except Exception as e:
             logger.error(f"Duplicate check failed: {e}")
@@ -75,12 +75,7 @@ class NotionClient:
         if not self.db_id:
             return None
 
-        # タイトルにmessage_tsを含めて重複チェック可能に
-        content_preview = post_content[:80]
-        if message_ts:
-            props["Message_TS"] = {"rich_text": [{"text": {"content": message_ts}}]}
-        else:
-            title = content_preview[:100]
+        title = post_content[:100]
 
         props: dict[str, Any] = {
             "投稿内容": {"title": [{"text": {"content": title[:200]}}]},
@@ -91,6 +86,9 @@ class NotionClient:
             "検出方法": {"select": {"name": method}},
             "対応ステータス": {"select": {"name": "Unprocessed"}},
         }
+
+        if message_ts:
+            props["Message_TS"] = {"rich_text": [{"text": {"content": message_ts}}]}
 
         if workspace:
             props["ワークスペース"] = {"rich_text": [{"text": {"content": workspace}}]}
