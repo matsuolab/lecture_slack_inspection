@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from common.secret_manager import get_secret
+from common.secret_manager import get_secret, get_parameter_by_name
 
 @dataclass(frozen=True)
 class InspectConfig:
@@ -19,7 +19,10 @@ class InspectConfig:
 
     use_mock_openai: bool
 
-def load_config() -> InspectConfig:
+def load_signing_secret() -> str:
+    return get_secret("SLACK_SIGNING_SECRET_PARAM_NAME")
+
+def load_config(team_id: str) -> InspectConfig:
     guidelines_text = os.getenv("GUIDELINES_TEXT", "").strip()
     if not guidelines_text:
         guidelines_text = (
@@ -36,14 +39,20 @@ def load_config() -> InspectConfig:
         if required and not v:
             raise RuntimeError(f"Missing env var: {name}")
         return v
+    
+    prefix = _get_env("SLACK_INSTALLATION_PARAM_PREFIX", default="/slack/installation").rstrip("/")
+    team_alert_channel_id = get_parameter_by_name(f"{prefix}/{team_id}/alert_channel_id")
+    fallback_alert_channel_id = _get_env("ALERT_PRIVATE_CHANNEL_ID", default="")
+    alert_channel_id = team_alert_channel_id or fallback_alert_channel_id
+    if not alert_channel_id:
+        raise RuntimeError(f"Missing alert channel ID for team {team_id}.")
 
     return InspectConfig(
-        slack_bot_token=get_secret("SLACK_BOT_TOKEN_PARAM_NAME"),
-        slack_signing_secret=get_secret("SLACK_SIGNING_SECRET_PARAM_NAME"),
+        slack_bot_token=get_parameter_by_name(f"{prefix}/{team_id}/bot_token"),
+        slack_signing_secret=load_signing_secret(),
         openai_api_key=get_secret("OPENAI_API_KEY_PARAM_NAME"),
         notion_api_key=get_secret("NOTION_API_KEY_PARAM_NAME"),
-        
-        alert_private_channel_id=_get_env("ALERT_PRIVATE_CHANNEL_ID", required=True),
+        alert_private_channel_id=alert_channel_id,
         notion_db_id=_get_env("NOTION_DB_ID"),
         
         openai_model=_get_env("OPENAI_MODEL", default="gpt-4o-mini"),

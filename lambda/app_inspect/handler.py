@@ -8,13 +8,19 @@ from openai import OpenAI
 # commonモジュールのインポート
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
-from .services.config import load_config
+from .services.config import load_config, load_signing_secret
 from .services.moderation import run_moderation
 from .components.slack_builder import encode_alert_button_value
 from .components.slack_ui import build_violation_alert_blocks
 from .services.models import severity_rank, ModerationResult
 
 SERVICE = "app_inspect"
+
+def _decode_body(event: dict) -> str:
+    body = event.get("body", "") or ""
+    if event.get("isBase64Encoded"):
+        body = base64.b64decode(body).decode("utf-8")
+    return body
 
 def lambda_handler(event: dict, context: Any) -> dict:
     # 1. コンテキスト初期化（この時点でSlackのIDなどが自動抽出される）
@@ -30,13 +36,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
             log_info(context, action="retry_skip", retry_num=lower_headers["x-slack-retry-num"])
             return {"statusCode": 200, "body": "ok"}
 
-        # 設定のロード
-        cfg = load_config()
 
-        # 2. ボディのパース
-        body = event.get("body") or ""
-        if event.get("isBase64Encoded"):
-            body = base64.b64decode(body).decode("utf-8")
+        body = _decode_body(event)
+        headers = event.get("headers") or {}
+        verifier = SignatureVerifier(load_signing_secret())
+        if not verifier.is_valid_request(body, headers):
+            log_info(context, action="verify_signature", result="fail", detail="invalid signature")
+            return {"statusCode": 401, "body": "invalid signature"}
 
         try:
             body_json = json.loads(body)
@@ -44,23 +50,17 @@ def lambda_handler(event: dict, context: Any) -> dict:
             log_error(context, action="parse_json", error=e)
             return {"statusCode": 400, "body": "invalid json"}
 
-        # 3. URL Verification (最優先)
+        # URL Verification
         if body_json.get("type") == "url_verification":
             log_info(context, action="url_verification", result="success")
-            return {
-                "statusCode": 200,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({"challenge": body_json.get("challenge", "")})
-            }
+            return {"statusCode": 200, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"challenge": body_json.get("challenge", "")})}
 
-        # 4. 署名検証
-        verifier = SignatureVerifier(cfg.slack_signing_secret)
-        headers = event.get("headers") or {}
-        if not verifier.is_valid_request(body, headers):
-            log_info(context, action="verify_signature", result="fail", detail="invalid signature")
-            return {"statusCode": 401, "body": "invalid signature"}
-
-        # 5. イベントフィルタリング
+        team_id = body_json.get("team_id") or context.slack_team_id
+        if not team_id:
+            log_info(context, action="missing_team_id", result="fail")
+            return {"statusCode": 400, "body": "missing team_id"}
+        
+        cfg = load_config(team_id)
         ev = body_json.get("event", {})
         if body_json.get("type") != "event_callback" or ev.get("type") != "message" or ev.get("bot_id") or ev.get("subtype"):
             return {"statusCode": 200, "body": "ignored"}

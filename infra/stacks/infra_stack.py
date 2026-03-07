@@ -19,12 +19,12 @@ class InfraStack(Stack):
         # -----------------------------
         # 1. パラメータ定義 (SSMパラメータ名を受け取る)
         # -----------------------------
-        slack_bot_token_param_name = CfnParameter(
+        slack_installation_param_prefix = CfnParameter(
             self,
-            "SlackBotTokenParamName",
+            "SlackInstallationParamPrefix",
             type="String",
-            default="/slack/bot/token",
-            description="SSM Parameter name for Slack Bot Token (SecureString).",
+            default="/slack/installation",
+            description="SSM prefix for Slack bot tokens per team_id.",
         )
 
         slack_signing_secret_param_name = CfnParameter(
@@ -33,6 +33,22 @@ class InfraStack(Stack):
             type="String",
             default="/slack/signing/secret",
             description="SSM Parameter name for Slack Signing Secret (SecureString).",
+        )
+
+        slacl_client_id_param_name = CfnParameter(
+            self,
+            "SlackClientIdParamName",
+            type="String",
+            default="/slack/client/id",
+            description="SSM Parameter name for Slack Client ID (SecureString).",
+        )
+
+        slack_client_secret_param_name = CfnParameter(
+            self,
+            "SlackClientSecretParamName",
+            type="String",
+            default="/slack/client/secret",
+            description="SSM Parameter name for Slack Client Secret (SecureString).",
         )
 
         openai_api_key_param_name = CfnParameter(
@@ -81,13 +97,13 @@ class InfraStack(Stack):
             "LambdaA_AppInspect",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_alert"],
+                exclude=["app_alert","app_oauth"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
-                "SLACK_BOT_TOKEN_PARAM_NAME": slack_bot_token_param_name.value_as_string,
+                "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
                 "SLACK_SIGNING_SECRET_PARAM_NAME": slack_signing_secret_param_name.value_as_string,
                 "OPENAI_API_KEY_PARAM_NAME": openai_api_key_param_name.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
@@ -98,7 +114,6 @@ class InfraStack(Stack):
             },
         )
 
-        # 【重要】DockerfileのCMDを上書きして app_inspect 用ハンドラーを指定
         lambda_a.node.default_child.add_property_override(
             "ImageConfig",
             {"Command": ["app_inspect.handler.lambda_handler"]}
@@ -112,36 +127,71 @@ class InfraStack(Stack):
             "LambdaB_AppAlert",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect"],
+                exclude=["app_inspect","app_oauth"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
-                "SLACK_BOT_TOKEN_PARAM_NAME": slack_bot_token_param_name.value_as_string,
+                "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
                 "SLACK_SIGNING_SECRET_PARAM_NAME": slack_signing_secret_param_name.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
             },
         )
 
-        # 【重要】DockerfileのCMDを上書きして app_alert 用ハンドラーを指定
         lambda_b.node.default_child.add_property_override(
             "ImageConfig",
             {"Command": ["app_alert.handler.lambda_handler"]}
         )
 
         # -----------------------------
+        # 5. Lambda C: OAuth対応 (app_oauth)
+        # -----------------------------
+        lambda_c = _lambda.DockerImageFunction(
+            self,
+            "LambdaC_SlackOAuth",
+            code=_lambda.DockerImageCode.from_image_asset(
+                directory="../lambda/",
+                exclude=["app_inspect","app_alert"],
+            ),
+            timeout=Duration.seconds(30),
+            memory_size=512,
+            log_retention=logs.RetentionDays.ONE_WEEK,
+            environment={
+                "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
+                "SLACK_CLIENT_ID_PARAM_NAME": slacl_client_id_param_name.value_as_string,
+                "SLACK_CLIENT_SECRET_PARAM_NAME": slack_client_secret_param_name.value_as_string,
+            },
+        )
+        lambda_c.node.default_child.add_property_override(
+            "ImageConfig",
+            {"Command": ["app_oauth.handler.lambda_handler"]}
+        )
+
+        # -----------------------------
         # 5. IAM権限付与 (SSM Parameter Store)
         # -----------------------------
         # TODO: 最小権限の原則に基づき、必要なパラメータARNのみを許可するように改善
-        ssm_policy_statement = iam.PolicyStatement(
+        runtime_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter"],
-            resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter/*"]
+            resources=[
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/*",
+                get_param_arn(openai_api_key_param_name.value_as_string),
+                get_param_arn(notion_api_key_param_name.value_as_string),
+            ],
         )
 
-        lambda_a.add_to_role_policy(ssm_policy_statement)
-        lambda_b.add_to_role_policy(ssm_policy_statement)
+        lambda_a.add_to_role_policy(runtime_policy)
+        lambda_b.add_to_role_policy(runtime_policy)
+        
+        oauth_policy = iam.PolicyStatement(
+            actions=["ssm:GetParameter","ssm:PutParameter"],
+            resources=[
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/slack*",
+            ],
+        )
+        lambda_c.add_to_role_policy(oauth_policy)
 
         # -----------------------------
         # 6. API Gateway (Slack エンドポイント)
@@ -163,6 +213,8 @@ class InfraStack(Stack):
         slack_root = api.root.add_resource("slack")
         events = slack_root.add_resource("events")
         interactions = slack_root.add_resource("interactions")
+        oauth = slack_root.add_resource("oauth")
+        callback = oauth.add_resource("callback")
 
         # POST /slack/events -> Lambda A
         events.add_method(
@@ -174,6 +226,12 @@ class InfraStack(Stack):
         interactions.add_method(
             "POST",
             apigw.LambdaIntegration(lambda_b, proxy=True),
+        )
+        
+        # GET /slack/oauth/callback -> Lambda C
+        callback.add_method(
+            "GET",
+            apigw.LambdaIntegration(lambda_c, proxy=True),
         )
 
         # -----------------------------
@@ -190,4 +248,11 @@ class InfraStack(Stack):
             "SlackInteractionsRequestUrl",
             value=f"{api.url}slack/interactions",
             description="URL for Slack Interactivity (Request URL)",
+        )
+
+        CfnOutput(
+            self,
+            "SlackOAuthRedirectUrl",
+            value=f"{api.url}slack/oauth/callback",
+            description="Redirect URL for Slack OAuth callback",
         )
