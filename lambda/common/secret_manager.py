@@ -1,7 +1,28 @@
 import boto3
 import os
 
+_ssm = boto3.client("ssm")
 _secrets_cache = {}
+
+def get_parameter_by_name(param_name: str, with_decryption: bool = True) -> str:
+    """
+    SSM Parameter Storeからパラメータ名で値を取得する
+    """
+    if not param_name:
+        return ""
+    cache_key = f"{param_name}:{with_decryption}"
+    if cache_key in _secrets_cache:
+        return _secrets_cache[cache_key]
+    
+    try:
+        resp = _ssm.get_parameter(Name=param_name, WithDecryption=with_decryption)
+        value = resp.get("Parameter", {}).get("Value", "")
+        _secrets_cache[cache_key] = value
+        return value
+    except Exception as e:
+        print(f"Failed to fetch parameter {param_name}: {e}")
+        return ""
+    
 
 def get_secret(secret_name_env_key: str) -> str:
     """
@@ -12,21 +33,20 @@ def get_secret(secret_name_env_key: str) -> str:
     if not param_name:
         return ""
     
-    # キャッシュ確認
-    if param_name in _secrets_cache:
-        return _secrets_cache[param_name]
+    return get_parameter_by_name(param_name, with_decryption=True)
 
-    # ★変更点: SSMクライアントを使用
-    client = boto3.client("ssm")
+def put_secure_parameter(param_name:str, value:str) -> None:
+    """
+    SSM Parameter StoreにSecureStringとしてパラメータを保存する
+    """
     try:
-        # ★変更点: get_parameter を使用 (WithDecryption=True で復号)
-        resp = client.get_parameter(Name=param_name, WithDecryption=True)
-        if "Parameter" in resp and "Value" in resp["Parameter"]:
-            secret_value = resp["Parameter"]["Value"]
-            _secrets_cache[param_name] = secret_value
-            return secret_value
+        _ssm.put_parameter(
+            Name=param_name,
+            Value=value,
+            Type="SecureString",
+            Overwrite=True
+        )
+        _secrets_cache.clear()
+        print(f"Parameter {param_name} has been stored successfully.")
     except Exception as e:
-        print(f"Failed to fetch parameter {param_name}: {e}")
-        return ""
-    
-    return ""
+        print(f"Failed to store parameter {param_name}: {e}")
