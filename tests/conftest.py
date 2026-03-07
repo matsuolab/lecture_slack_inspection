@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from unittest.mock import MagicMock
 
+os.environ.setdefault("AWS_DEFAULT_REGION", "ap-northeast-1")
+os.environ.setdefault("AWS_REGION", "ap-northeast-1")
 # -----------------------------
 # Paths
 # -----------------------------
@@ -101,8 +103,14 @@ def mock_external_services(mocker):
     mock_notion_client = mocker.MagicMock()
     mock_notion_client.check_duplicate_violation.return_value = False
 
+    mocker.patch("common.secret_manager.get_secret", return_value="secret")
+    mocker.patch("common.secret_manager.get_parameter_by_name", return_value="dummy")
+
     mocker.patch("app_inspect.handler.SignatureVerifier", return_value=mock_verifier)
     mocker.patch("app_alert.handler.SignatureVerifier", return_value=mock_verifier)
+
+    # mocker.patch("app_inspect.handler.config.load_slack_client", return_value="secret")
+    # mocker.patch("app_alert.handler.config.load_slack_client", return_value="secret")
 
     mocker.patch("app_inspect.handler.WebClient", return_value=mock_slack_client)
     mocker.patch("app_alert.handler.WebClient", return_value=mock_slack_client)

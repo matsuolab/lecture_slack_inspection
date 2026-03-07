@@ -8,15 +8,21 @@ from app_alert.handler import lambda_handler as alert_handler
 
 def _create_apigw_event(body_dict: dict, headers: dict = None) -> dict:
     """Slack Event APIからのリクエストを模したAPI Gatewayイベントを作成"""
+    body = dict(body_dict)
+    if body.get("type") == "event_callback":
+        body.setdefault("team_id", "T123")
+
     return {
-        "body": json.dumps(body_dict),
+        "body": json.dumps(body),
         "headers": headers or {"content-type": "application/json"},
         "isBase64Encoded": False,
     }
 
 def _create_interactivity_event(payload_dict: dict, headers: dict = None) -> dict:
     """Slack Interactivityからのリクエストを模したAPI Gatewayイベントを作成"""
-    body_str = "payload=" + urllib.parse.quote(json.dumps(payload_dict))
+    payload = dict(payload_dict)
+    payload.setdefault("team", {"id": "T123"})
+    body_str = "payload=" + urllib.parse.quote(json.dumps(payload))
     base_headers = {"content-type": "application/x-www-form-urlencoded"}
     if headers:
         base_headers.update(headers)
@@ -43,6 +49,7 @@ def test_inspect_retry_skip(mock_external_services, mock_config):
 
 def test_inspect_url_verification(mock_external_services, mock_config):
     """Slack Appの初期設定時の url_verification イベントに対して challenge を返すことを確認"""
+    mock_external_services["signature"].is_valid_request.return_value = True
     event = _create_apigw_event({
         "type": "url_verification",
         "challenge": "test_challenge_string"
@@ -140,7 +147,7 @@ def test_alert_invalid_signature(mock_external_services, mock_config):
     resp = alert_handler(event, {})
     
     assert resp["statusCode"] == 401
-    assert resp["body"] == "Invalid signature"
+    assert resp["body"] == "invalid signature"
 
 def test_alert_ignore_unknown_action(mock_external_services, mock_config):
     """想定外のボタン(action_id)が押された場合は無視して200を返すことを確認"""
