@@ -20,7 +20,7 @@ def load_config(team_id: str) -> AlertConfig:
     def _get_env(name: str, default: str = "") -> str:
         return os.getenv(name, default)
     
-    prefix = _get_env("SLACK_INSTALLATION_PARAM_PREFIX", default="/slack/installations").rstrip("/")
+    prefix = _get_env("SLACK_INSTALLATION_PARAM_PREFIX", default="/slack/installation").rstrip("/")
     
     return AlertConfig(
         slack_bot_token=get_parameter_by_name(f"{prefix}/{team_id}/bot_token"),

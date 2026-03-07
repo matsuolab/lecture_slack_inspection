@@ -36,8 +36,6 @@ def lambda_handler(event: dict, context: Any) -> dict:
             log_info(context, action="retry_skip", retry_num=lower_headers["x-slack-retry-num"])
             return {"statusCode": 200, "body": "ok"}
 
-        # 設定のロード
-        cfg = load_config()
 
         body = _decode_body(event)
         headers = event.get("headers") or {}

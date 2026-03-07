@@ -40,7 +40,7 @@ def load_config(team_id: str) -> InspectConfig:
             raise RuntimeError(f"Missing env var: {name}")
         return v
     
-    prefix = _get_env("SLACK_INSTALLATION_PARAM_PREFIX", default="/slack/installations").rstrip("/")
+    prefix = _get_env("SLACK_INSTALLATION_PARAM_PREFIX", default="/slack/installation").rstrip("/")
     team_alert_channel_id = get_parameter_by_name(f"{prefix}/{team_id}/alert_channel_id")
     fallback_alert_channel_id = _get_env("ALERT_PRIVATE_CHANNEL_ID", default="")
     alert_channel_id = team_alert_channel_id or fallback_alert_channel_id

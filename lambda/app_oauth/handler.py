@@ -35,7 +35,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict:
         
         client_id = get_secret("SLACK_CLIENT_ID_PARAM_NAME")
         client_secret = get_secret("SLACK_CLIENT_SECRET_PARAM_NAME")
-        prefix = os.getenv("SLACK_INSTALLATION_PARAM_PREFIX", "/slack/installations").rstrip("/")
+        prefix = os.getenv("SLACK_INSTALLATION_PARAM_PREFIX", "/slack/installation").rstrip("/")
 
         if not client_id or not client_secret:
             log_info(context, action="oauth_error", result="fail", detail="missing client_id or client_secret")
@@ -68,7 +68,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict:
             log_info(context, action="oauth_payload_error", result="fail", payload=payload)
             return _html(500, "<h1>OAuth payload missing team_id or access_token</h1>")
         
-        put_secure_parameter(f"{prefix}/{team_id}/access_token", access_token)
+        put_secure_parameter(f"{prefix}/{team_id}/bot_token", access_token)
         if alert_channel_id:
             put_secure_parameter(f"{prefix}/{team_id}/alert_channel_id", alert_channel_id)
             log_info(context, action="oauth_alert_channel_saved", team_id=team_id, channel_id=alert_channel_id)
