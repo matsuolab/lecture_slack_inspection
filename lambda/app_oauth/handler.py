@@ -29,7 +29,7 @@ def _b64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
 
 def _b64url_decode(data: str) -> bytes:
-    return base64.urlsafe_64decode(data + "==" * (-len(data) % 4))
+    return base64.urlsafe_64decode(data + "=" * (-len(data) % 4))
 
 def _oauth_redirect_uri() -> str:
     v = os.getenv("SLACK_OAUTH_REDIRECT_URI", "").strip()
@@ -44,17 +44,17 @@ def _oauth_state_secret() -> str:
     return v
 
 def _allowed_team_ids() -> set[str]:
-    raw = (get_secret_no_cache("OAUTH_ALLOWED_TEAM_IDS") or "").strip()
+    raw = (get_secret_no_cache("OAUTH_ALLOWED_TEAM_IDS_PARAM_NAME") or "").strip()
     if not raw:
         return set()
     # JSON配列もしくはカンマ区切りで指定できるようにする
     if raw.startswith("["):
         try:
             values = json.load(raw)
-            return {str.strip() for x in values if str(x).strip()}
+            return {str(x).strip() for x in values if str(x).strip()}
         except Exception:
             pass
-        
+
     return {x.strip() for x in raw.split(",") if x.strip()}
 
 def _bot_scopes() -> str:
@@ -178,7 +178,7 @@ def _handle_callback(event: dict[str, Any], context: Any) -> dict:
     if not payload.get("ok"):
         slack_error = html.escape(str(payload.get("error", "unknown_error")))
         log_info(context, action="oauth_error", result="fail", slack_error=slack_error)
-        return _html(400, f"Slack OAuth exchange failedError: {slack_error}")
+        return _html(400, f"Slack OAuth exchange failed\n\nError: {slack_error}")
     
     team = payload.get("team") or {}
     team_id = team.get("id")
@@ -194,7 +194,11 @@ def _handle_callback(event: dict[str, Any], context: Any) -> dict:
     allowed = _allowed_team_ids()
     if allowed and team_id not in allowed:
         _revoke_token(access_token)
-        log_info(context, action="oauth_rejected", team_id=team_id, allowed_teams=",".join(expected_team))
+        log_info(context,
+                 action="oauth_rejected",
+                 team_id=team_id,
+                 allowed_teams=",".join(expected_team),
+                 )
         return _html(403, "Installation is not allowed for this workspace")
     
     if expected_team and team_id != expected_team:

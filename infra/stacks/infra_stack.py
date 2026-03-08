@@ -57,9 +57,9 @@ class InfraStack(Stack):
             default="/slack/oauth/state",
             description="SSM Parameter name for OAuth state (SecureString).",
         )
-        oauth_allowed_team_ids_param_name = CfnParameter(
+        oauth_allowed_team_ids = CfnParameter(
             self,
-            "OAuthAllowedTeamIdsParamName",
+            "OAuthAllowedTeamIds",
             type="String",
             default="",
             description="SSM Parameter name for allowed Slack team IDs (comma-separated).",
@@ -183,7 +183,7 @@ class InfraStack(Stack):
                 "SLACK_CLIENT_ID_PARAM_NAME": slack_client_id_param_name.value_as_string,
                 "SLACK_CLIENT_SECRET_PARAM_NAME": slack_client_secret_param_name.value_as_string,
                 "OAUTH_STATE_SECRET_PARAM_NAME": oauth_state_secret_param_name.value_as_string,
-                "oauth_allowed_team_ids_param_name": oauth_allowed_team_ids_param_name.value_as_string,
+                "OAUTH_ALLOWED_TEAM_IDS_PARAM_NAME": oauth_allowed_team_ids.value_as_string,
                 "SLACK_BOT_SCOPES": slack_bot_scopes.value_as_string,
             },
         )
@@ -221,7 +221,7 @@ class InfraStack(Stack):
                 get_param_arn(slack_client_id_param_name.value_as_string),
                 get_param_arn(slack_client_secret_param_name.value_as_string),
                 get_param_arn(oauth_state_secret_param_name.value_as_string),
-                get_param_arn(oauth_allowed_team_ids_param_name.value_as_string),
+                get_param_arn(oauth_allowed_team_ids.value_as_string),
             ],
         )
         lambda_c.add_to_role_policy(oauth_policy)
