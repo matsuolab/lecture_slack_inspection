@@ -271,7 +271,6 @@ class InfraStack(Stack):
             "GET",
             apigw.LambdaIntegration(lambda_c, proxy=True),
         )
-        lambda_c.add_environment("SLACK_OAUTH_REDIRECT_URI", f"{api.url}slack/oauth/callback")
 
         # -----------------------------
         # 7. Outputs

@@ -29,13 +29,41 @@ def _b64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
 
 def _b64url_decode(data: str) -> bytes:
-    return base64.urlsafe_64decode(data + "=" * (-len(data) % 4))
+    return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
 
-def _oauth_redirect_uri() -> str:
-    v = os.getenv("SLACK_OAUTH_REDIRECT_URI", "").strip()
-    if not v:
-        raise ValueError("SLACK_OAUTH_REDIRECT_URI environment variable is not set")
-    return v
+def _header(event: dict[str, Any], name: str) -> str:
+    headers = event.get("headers") or {}
+    return (
+        headers.get(name)
+        or headers.get(name.lower())
+        or headers.get(name.upper())
+        or ""
+    ).strip()
+
+def _oauth_redirect_uri(event: dict[str, Any]) -> str:
+    proto = _header(event, "X-Forwarded-Proto") or "https"
+    host = _header(event, "X-Forwarded-Host") or _header(event, "Host")
+    if not proto or not host:
+        raise ValueError("Missing required headers for redirect URI")
+    
+    request_context = event.get("requestContext") or {}
+    request_path = (
+        request_context.get("path")
+        or event.get("Path")
+        or event.get("rawPath")
+        or ""
+    ).strip("/")
+
+    if request_path.endswith("/slack/oauth/callback"):
+        callback_path = request_path[:-len("/start")] + "/callback"
+    elif request_path.endswith("/slack/oauth/callback"):
+        callback_path = request_path
+    else:
+        stage = request_context.get("stage")
+        stage_prefix = f"/{stage}" if stage else ""
+        callback_path = f"{stage_prefix}/slack/oauth/callback"
+    
+    return f"{proto}://{host}{callback_path}"
 
 def _oauth_state_secret() -> str:
     v = get_secret("OAUTH_STATE_SECRET_PARAM_NAME")
@@ -50,7 +78,7 @@ def _allowed_team_ids() -> set[str]:
     # JSON配列もしくはカンマ区切りで指定できるようにする
     if raw.startswith("["):
         try:
-            values = json.load(raw)
+            values = json.loads(raw)
             return {str(x).strip() for x in values if str(x).strip()}
         except Exception:
             pass
@@ -122,11 +150,12 @@ def _handle_start(event: dict[str, Any], context: Any) -> dict:
             "team": team_hint,
         }
     )
+    redirect_uri = _oauth_redirect_uri(event)
 
     params = {
         "client_id": client_id,
         "scope": _bot_scopes(),
-        "redirect_uri": _oauth_redirect_uri(),
+        "redirect_uri": redirect_uri,
         "state": state,
     }
     if team_hint:
@@ -158,7 +187,7 @@ def _handle_callback(event: dict[str, Any], context: Any) -> dict:
     client_id = get_secret("SLACK_CLIENT_ID_PARAM_NAME")
     client_secret = get_secret("SLACK_CLIENT_SECRET_PARAM_NAME")
     prefix = os.getenv("SLACK_INSTALLATION_PARAM_PREFIX", "/slack/installation").rstrip("/")
-    redirect_uri = _oauth_redirect_uri()
+    redirect_uri = _oauth_redirect_uri(event)
     if not client_id or not client_secret:
         return _html(500, "Server configuration error")
     
@@ -197,7 +226,7 @@ def _handle_callback(event: dict[str, Any], context: Any) -> dict:
         log_info(context,
                  action="oauth_rejected",
                  team_id=team_id,
-                 allowed_teams=",".join(expected_team),
+                 allowed_teams=",".join(sorted(allowed)),
                  )
         return _html(403, "Installation is not allowed for this workspace")
     
