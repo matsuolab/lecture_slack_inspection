@@ -39,16 +39,21 @@ def load_config(team_id: str) -> InspectConfig:
         if required and not v:
             raise RuntimeError(f"Missing env var: {name}")
         return v
+
+    
     
     prefix = _get_env("SLACK_INSTALLATION_PARAM_PREFIX", default="/slack/installation").rstrip("/")
-    team_alert_channel_id = get_parameter_by_name(f"{prefix}/{team_id}/alert_channel_id")
-    fallback_alert_channel_id = _get_env("ALERT_PRIVATE_CHANNEL_ID", default="")
-    alert_channel_id = team_alert_channel_id or fallback_alert_channel_id
+    slack_bot_token = get_parameter_by_name(f"{prefix}/{team_id}/bot_token")
+    alert_channel_id = get_parameter_by_name(f"{prefix}/{team_id}/alert_channel_id")
+
+    if not slack_bot_token:
+        raise RuntimeError(f"Missing Slack bot token for team {team_id}.")
+    
     if not alert_channel_id:
         raise RuntimeError(f"Missing alert channel ID for team {team_id}.")
 
     return InspectConfig(
-        slack_bot_token=get_parameter_by_name(f"{prefix}/{team_id}/bot_token"),
+        slack_bot_token=slack_bot_token,
         slack_signing_secret=load_signing_secret(),
         openai_api_key=get_secret("OPENAI_API_KEY_PARAM_NAME"),
         notion_api_key=get_secret("NOTION_API_KEY_PARAM_NAME"),

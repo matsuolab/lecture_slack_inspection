@@ -23,6 +23,19 @@ def get_parameter_by_name(param_name: str, with_decryption: bool = True) -> str:
         print(f"Failed to fetch parameter {param_name}: {e}")
         return ""
     
+def get_parameter_by_name_no_cache(param_name: str, with_decryption: bool = True) -> str:
+    """
+    キャッシュを使用せずにSSM Parameter Storeからパラメータ名で値を取得する
+    """
+    if not param_name:
+        return ""
+    try:
+        resp = _ssm.get_parameter(Name=param_name, WithDecryption=with_decryption)
+        value = resp.get("Parameter", {}).get("Value", "")
+        return value
+    except Exception as e:
+        print(f"Failed to fetch parameter {param_name}: {e}")
+        return ""
 
 def get_secret(secret_name_env_key: str) -> str:
     """
@@ -34,6 +47,16 @@ def get_secret(secret_name_env_key: str) -> str:
         return ""
     
     return get_parameter_by_name(param_name, with_decryption=True)
+
+def get_secret_no_cache(secret_name_env_key: str) -> str:
+    """
+    キャッシュを使用せずに環境変数(Key)からパラメータ名を取得し、SSM Parameter Storeから値を取得する
+    """
+    param_name = os.getenv(secret_name_env_key)
+    if not param_name:
+        return ""
+    
+    return get_parameter_by_name_no_cache(param_name, with_decryption=True)
 
 def put_secure_parameter(param_name:str, value:str) -> None:
     """
@@ -50,3 +73,5 @@ def put_secure_parameter(param_name:str, value:str) -> None:
         print(f"Parameter {param_name} has been stored successfully.")
     except Exception as e:
         print(f"Failed to store parameter {param_name}: {e}")
+
+

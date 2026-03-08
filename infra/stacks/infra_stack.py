@@ -35,7 +35,7 @@ class InfraStack(Stack):
             description="SSM Parameter name for Slack Signing Secret (SecureString).",
         )
 
-        slacl_client_id_param_name = CfnParameter(
+        slack_client_id_param_name = CfnParameter(
             self,
             "SlackClientIdParamName",
             type="String",
@@ -49,6 +49,27 @@ class InfraStack(Stack):
             type="String",
             default="/slack/client/secret",
             description="SSM Parameter name for Slack Client Secret (SecureString).",
+        )
+        oauth_state_secret_param_name = CfnParameter(
+            self,
+            "OAuthStateSecretParamName",
+            type="String",
+            default="/slack/oauth/state",
+            description="SSM Parameter name for OAuth state (SecureString).",
+        )
+        oauth_allowed_team_ids_param_name = CfnParameter(
+            self,
+            "OAuthAllowedTeamIdsParamName",
+            type="String",
+            default="",
+            description="SSM Parameter name for allowed Slack team IDs (comma-separated).",
+        )
+        slack_bot_scopes = CfnParameter(
+            self,
+            "SlackBotScopes",
+            type="String",
+            default="chat:write,channels:read,channels:history,users:read,team:read,incoming-webhook",
+            description="Scopes used by /slack/oauth/start. Must match your app settings",
         )
 
         openai_api_key_param_name = CfnParameter(
@@ -67,12 +88,12 @@ class InfraStack(Stack):
             description="SSM Parameter name for Notion API Key (SecureString).",
         )
 
-        alert_private_channel_id = CfnParameter(
-            self,
-            "AlertPrivateChannelId",
-            type="String",
-            description="Slack private channel ID to post violation alerts (e.g., C0123...).",
-        )
+        # alert_private_channel_id = CfnParameter(
+        #     self,
+        #     "AlertPrivateChannelId",
+        #     type="String",
+        #     description="Slack private channel ID to post violation alerts (e.g., C0123...).",
+        # )
 
         notion_db_id = CfnParameter(
             self,
@@ -107,7 +128,6 @@ class InfraStack(Stack):
                 "SLACK_SIGNING_SECRET_PARAM_NAME": slack_signing_secret_param_name.value_as_string,
                 "OPENAI_API_KEY_PARAM_NAME": openai_api_key_param_name.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
-                "ALERT_PRIVATE_CHANNEL_ID": alert_private_channel_id.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 # TODO: 結合テスト時には無効化
                 "USE_MOCK_OPENAI": "true",
@@ -160,8 +180,11 @@ class InfraStack(Stack):
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
                 "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
-                "SLACK_CLIENT_ID_PARAM_NAME": slacl_client_id_param_name.value_as_string,
+                "SLACK_CLIENT_ID_PARAM_NAME": slack_client_id_param_name.value_as_string,
                 "SLACK_CLIENT_SECRET_PARAM_NAME": slack_client_secret_param_name.value_as_string,
+                "OAUTH_STATE_SECRET_PARAM_NAME": oauth_state_secret_param_name.value_as_string,
+                "oauth_allowed_team_ids_param_name": oauth_allowed_team_ids_param_name.value_as_string,
+                "SLACK_BOT_SCOPES": slack_bot_scopes.value_as_string,
             },
         )
         lambda_c.node.default_child.add_property_override(
@@ -173,10 +196,15 @@ class InfraStack(Stack):
         # 5. IAM権限付与 (SSM Parameter Store)
         # -----------------------------
         # TODO: 最小権限の原則に基づき、必要なパラメータARNのみを許可するように改善
+        installation_param_arn = (
+            f"arn:aws:ssm:{self.region}:{self.account}:parameter/"
+            f"{slack_installation_param_prefix.value_as_string.lstrip('/')}/*"
+        )
         runtime_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[
-                f"arn:aws:ssm:{self.region}:{self.account}:parameter/*",
+                installation_param_arn,
+                get_param_arn(slack_signing_secret_param_name.value_as_string),
                 get_param_arn(openai_api_key_param_name.value_as_string),
                 get_param_arn(notion_api_key_param_name.value_as_string),
             ],
@@ -189,6 +217,11 @@ class InfraStack(Stack):
             actions=["ssm:GetParameter","ssm:PutParameter"],
             resources=[
                 f"arn:aws:ssm:{self.region}:{self.account}:parameter/slack*",
+                installation_param_arn,
+                get_param_arn(slack_client_id_param_name.value_as_string),
+                get_param_arn(slack_client_secret_param_name.value_as_string),
+                get_param_arn(oauth_state_secret_param_name.value_as_string),
+                get_param_arn(oauth_allowed_team_ids_param_name.value_as_string),
             ],
         )
         lambda_c.add_to_role_policy(oauth_policy)
@@ -214,6 +247,7 @@ class InfraStack(Stack):
         events = slack_root.add_resource("events")
         interactions = slack_root.add_resource("interactions")
         oauth = slack_root.add_resource("oauth")
+        start = oauth.add_resource("start")
         callback = oauth.add_resource("callback")
 
         # POST /slack/events -> Lambda A
@@ -229,10 +263,15 @@ class InfraStack(Stack):
         )
         
         # GET /slack/oauth/callback -> Lambda C
+        start.add_method(
+            "GET",
+            apigw.LambdaIntegration(lambda_c, proxy=True),
+        )
         callback.add_method(
             "GET",
             apigw.LambdaIntegration(lambda_c, proxy=True),
         )
+        lambda_c.add_environment("SLACK_OAUTH_REDIRECT_URI", f"{api.url}slack/oauth/callback")
 
         # -----------------------------
         # 7. Outputs
@@ -248,6 +287,13 @@ class InfraStack(Stack):
             "SlackInteractionsRequestUrl",
             value=f"{api.url}slack/interactions",
             description="URL for Slack Interactivity (Request URL)",
+        )
+
+        CfnOutput(
+            self,
+            "SlackOAuthStartUrl",
+            value=f"{api.url}slack/oauth/start",
+            description="URL for Slack OAuth installation (Start URL)",
         )
 
         CfnOutput(
