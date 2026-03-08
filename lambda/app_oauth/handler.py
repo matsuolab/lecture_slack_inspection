@@ -8,7 +8,7 @@ import json
 import time
 import secrets
 
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import urlencode
 
 import requests
