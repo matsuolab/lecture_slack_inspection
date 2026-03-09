@@ -88,16 +88,29 @@ npx promptfoo view
 
 各テストケースは 2 つの JavaScript アサーションで採点されます。
 
-#### メトリクス: `overall`（pass/fail を決定）
+#### メトリクス: `Detection`（pass/fail を決定）
 
 | 条件 | スコア加算 | pass 判定 |
 |---|---|---|
-| `output.is_violation` が正解と一致 | +0.5 | ◯（これが pass の必須条件） |
-| `output.article_id` が正解条文と一致 | +0.5 | — |
+| `output.is_violation` が正解と一致 | +1.0 | ◯（これが pass の必須条件） |
+
 
 - **pass**: `is_violation` の正誤のみで判定
-- **score**: 0.0〜1.0（`is_violation` + `article_id` の正確さで決まる）
-- 非違反ケースでは `is_violation` 一致のみで score = 1.0
+- **score**: 0.0〜1.0（違反ケースと非違反ケースで同じスコア設計）
+
+
+#### メトリクス: `Article`（条文IDの推論の精度、pass/failには影響しない）
+
+`weight: 0` を指定することで pass/fail・総合スコアには加算されず、UI 上に独立した参考指標として表示されます。
+
+| 条件 | スコア加算 | pass 判定 |
+|---|---|---|
+| `output.article_id` が正解条文と一致 | +1.0 | — |
+
+
+- **score**: 0.0〜1.0
+- 非違反ケースは自動的にscoreが1.0になるようにしている
+
 
 #### メトリクス: `confidence`（参考指標、pass/fail には影響しない）
 
