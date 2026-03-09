@@ -19,13 +19,14 @@ defaultTest:
       value: |
         const isCorrect = output.is_violation === context.vars.expected_is_violation;
         return {
-          pass: isCorrect,
+          pass: isCorrect, 
           score: isCorrect ? 1.0 : 0.0,
           reason: `Detection - Expected: ${context.vars.expected_is_violation}, Got: ${output.is_violation}`
         };
 
     - type: javascript
       metric: Article
+      weight: 0
       value: |
         const expectedIsViolation = context.vars.expected_is_violation;
         const expectedArticle = context.vars.expected_violating_article || '';
@@ -42,14 +43,14 @@ defaultTest:
         }
         
         return {
-          pass: true,
+          pass: true, 
           score: isCorrect ? 1.0 : 0.0,
           reason: `Article Check - ${reason}`
         };
 
     - type: javascript
       metric: confidence
-      weight: 0
+      weight: 0 
       value: |
         const isViolationCorrect = output.is_violation === context.vars.expected_is_violation;
         const confidence = output.confidence ?? 0;
@@ -66,9 +67,11 @@ defaultTest:
           reason = `wrong prediction, confidence=${confidence} (overconfidence penalty)`;
         }
         
-        return { pass: true, score, reason };
+        return { 
+          pass: true, 
+          score, 
+          reason 
+        };
 
 tests:
-  - file://testcases.yml # サンプルテストケース
-  - file://datasets/testcases_preview.yaml # 評価データセット（先頭5件のプレビュー）
-  # - file://datasets/testcases.yaml # 全件評価（4968件）
+  - file://datasets/testcases_preview.yaml
