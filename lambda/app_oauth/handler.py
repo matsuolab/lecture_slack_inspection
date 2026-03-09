@@ -48,18 +48,18 @@ def _oauth_redirect_uri(event: dict[str, Any]) -> str:
     
     request_context = event.get("requestContext") or {}
     request_path = (
-        request_context.get("path")
-        or event.get("Path")
-        or event.get("rawPath")
+        event.get("rawPath")
+        or request_context.get("path")
+        or event.get("path")
         or ""
-    ).strip("/")
+    ).strip()
 
-    if request_path.endswith("/slack/oauth/callback"):
+    if request_path.endswith("/slack/oauth/start"):
         callback_path = request_path[:-len("/start")] + "/callback"
     elif request_path.endswith("/slack/oauth/callback"):
         callback_path = request_path
     else:
-        stage = request_context.get("stage")
+        stage = (request_context.get("stage") or "").strip()
         stage_prefix = f"/{stage}" if stage else ""
         callback_path = f"{stage_prefix}/slack/oauth/callback"
     
@@ -142,15 +142,15 @@ def _handle_start(event: dict[str, Any], context: Any) -> dict:
     client_id = get_secret("SLACK_CLIENT_ID_PARAM_NAME")
     if not client_id:
         return _html(500, "Missing Slack client ID")
-    
+    redirect_uri = _oauth_redirect_uri(event)
     state = _sign_state(
         {
             "iat": int(time.time()),
             "nonce": secrets.token_urlsafe(16),
             "team": team_hint,
+            "redirect_uri": redirect_uri,
         }
     )
-    redirect_uri = _oauth_redirect_uri(event)
 
     params = {
         "client_id": client_id,
@@ -187,9 +187,11 @@ def _handle_callback(event: dict[str, Any], context: Any) -> dict:
     client_id = get_secret("SLACK_CLIENT_ID_PARAM_NAME")
     client_secret = get_secret("SLACK_CLIENT_SECRET_PARAM_NAME")
     prefix = os.getenv("SLACK_INSTALLATION_PARAM_PREFIX", "/slack/installation").rstrip("/")
-    redirect_uri = _oauth_redirect_uri(event)
+    redirect_uri = (state_payload.get("redirect_uri") or "").strip()
     if not client_id or not client_secret:
         return _html(500, "Server configuration error")
+    if not redirect_uri:
+        return _html(400, "Missing redirect_uri in state")
     
     resp = requests.post(
         "https://slack.com/api/oauth.v2.access",
@@ -226,6 +228,7 @@ def _handle_callback(event: dict[str, Any], context: Any) -> dict:
         log_info(context,
                  action="oauth_rejected",
                  team_id=team_id,
+                 expected_team=expected_team,
                  allowed_teams=",".join(sorted(allowed)),
                  )
         return _html(403, "Installation is not allowed for this workspace")

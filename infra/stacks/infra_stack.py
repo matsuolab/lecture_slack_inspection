@@ -57,11 +57,11 @@ class InfraStack(Stack):
             default="/slack/oauth/state",
             description="SSM Parameter name for OAuth state (SecureString).",
         )
-        oauth_allowed_team_ids = CfnParameter(
+        oauth_allowed_team_ids_param_name = CfnParameter(
             self,
-            "OAuthAllowedTeamIds",
+            "OAuthAllowedTeamIdsParamName",
             type="String",
-            default="",
+            default="/slack/oauth/allowed_team_ids",
             description="SSM Parameter name for allowed Slack team IDs (comma-separated).",
         )
         slack_bot_scopes = CfnParameter(
@@ -107,8 +107,7 @@ class InfraStack(Stack):
         # -----------------------------
         # SecureStringはCDKデプロイ時に値を取得できないため、ARNを構築してIAM権限で使用します
         def get_param_arn(param_name: str) -> str:
-            clean_name = param_name if not param_name.startswith("/") else param_name[1:]
-            return f"arn:aws:ssm:{self.region}:{self.account}:parameter/{clean_name}"
+            return f"arn:aws:ssm:{self.region}:{self.account}:parameter{param_name}"
 
         # -----------------------------
         # 3. Lambda A: Slack投稿監視 (app_inspect)
@@ -183,7 +182,7 @@ class InfraStack(Stack):
                 "SLACK_CLIENT_ID_PARAM_NAME": slack_client_id_param_name.value_as_string,
                 "SLACK_CLIENT_SECRET_PARAM_NAME": slack_client_secret_param_name.value_as_string,
                 "OAUTH_STATE_SECRET_PARAM_NAME": oauth_state_secret_param_name.value_as_string,
-                "OAUTH_ALLOWED_TEAM_IDS_PARAM_NAME": oauth_allowed_team_ids.value_as_string,
+                "OAUTH_ALLOWED_TEAM_IDS_PARAM_NAME": oauth_allowed_team_ids_param_name.value_as_string,
                 "SLACK_BOT_SCOPES": slack_bot_scopes.value_as_string,
             },
         )
@@ -197,8 +196,8 @@ class InfraStack(Stack):
         # -----------------------------
         # TODO: 最小権限の原則に基づき、必要なパラメータARNのみを許可するように改善
         installation_param_arn = (
-            f"arn:aws:ssm:{self.region}:{self.account}:parameter/"
-            f"{slack_installation_param_prefix.value_as_string.lstrip('/')}/*"
+            f"arn:aws:ssm:{self.region}:{self.account}:parameter"
+            f"{slack_installation_param_prefix.value_as_string}/*"
         )
         runtime_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter"],
@@ -221,7 +220,7 @@ class InfraStack(Stack):
                 get_param_arn(slack_client_id_param_name.value_as_string),
                 get_param_arn(slack_client_secret_param_name.value_as_string),
                 get_param_arn(oauth_state_secret_param_name.value_as_string),
-                get_param_arn(oauth_allowed_team_ids.value_as_string),
+                get_param_arn(oauth_allowed_team_ids_param_name.value_as_string),
             ],
         )
         lambda_c.add_to_role_policy(oauth_policy)
