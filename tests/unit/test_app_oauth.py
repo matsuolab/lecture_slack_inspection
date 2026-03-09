@@ -179,7 +179,14 @@ def test_handle_callback_rejects_not_allowed_team_and_revokes_token(
     """
     revoke_mock = MagicMock()
 
-    monkeypatch.setattr(oauth, "_verify_state", lambda state: {"team": None})
+    monkeypatch.setattr(
+        oauth,
+        "_verify_state",
+        lambda state: {
+            "team": None,
+            "redirect_uri": "https://example.com/slack/oauth/callback",
+        },
+    )
     monkeypatch.setattr(oauth, "_allowed_team_ids", lambda: {"T_ALLOWED"})
     monkeypatch.setattr(oauth, "_revoke_token", revoke_mock)
     monkeypatch.setattr(
@@ -216,7 +223,14 @@ def test_handle_callback_rejects_team_mismatch_and_revokes_token(
     """state に入れた期待 team と実際の team が違う場合は 403 + revoke すること"""
     revoke_mock = MagicMock()
 
-    monkeypatch.setattr(oauth, "_verify_state", lambda state: {"team": "T_EXPECT"})
+    monkeypatch.setattr(
+        oauth,
+        "_verify_state",
+        lambda state: {
+            "team": "T_EXPECT",
+            "redirect_uri": "https://example.com/slack/oauth/callback",
+        }
+    )
     monkeypatch.setattr(oauth, "_allowed_team_ids", lambda: {"T_EXPECT", "T_OTHER"})
     monkeypatch.setattr(oauth, "_revoke_token", revoke_mock)
     monkeypatch.setattr(
@@ -251,7 +265,14 @@ def test_handle_callback_success_saves_team_specific_parameters(
     monkeypatch, oauth_common_mocks
 ):
     """正常な callback では team ごとの bot token / channel / installed_at を保存すること"""
-    monkeypatch.setattr(oauth, "_verify_state", lambda state: {"team": "T123"})
+    monkeypatch.setattr(
+        oauth,
+        "_verify_state",
+        lambda state: {
+            "team": "T123",
+            "redirect_uri": "https://example.com/slack/oauth/callback",
+        },
+    )
     monkeypatch.setattr(oauth, "_allowed_team_ids", lambda: {"T123"})
     monkeypatch.setattr(oauth.time, "time", lambda: 1_700_000_000)
     monkeypatch.setattr(
