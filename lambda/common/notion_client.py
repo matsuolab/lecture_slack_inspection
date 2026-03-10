@@ -175,6 +175,19 @@ class NotionClient:
             logger.error("Article page fetch failed for %s: %s", page_id, e)
             return None
 
+    def get_page(self, page_id: str) -> Optional[dict]:
+        """ページ情報を取得する"""
+        url = f"{_NOTION_API_BASE}/pages/{page_id}"
+        try:
+            resp = requests.get(url, headers=self.headers, timeout=10)
+            if not resp.ok:
+                logger.error("Page fetch failed for %s: %s", page_id, resp.status_code)
+                return None
+            return resp.json()
+        except Exception as e:
+            logger.error("Page fetch failed for %s: %s", page_id, e)
+            return None
+
     def _update_page(self, page_id: str, props: dict[str, Any]) -> bool:
         """ページプロパティを更新する共通メソッド"""
         url = f"{_NOTION_API_BASE}/pages/{page_id}"

@@ -1,4 +1,4 @@
-"""削除リマインドサービス: Notionポーリングで初回警告送信 + 48h後リマインド送信"""
+"""削除リマインドサービス: Notionポーリングで初回警告送信 + 48h後Notion更新"""
 
 import logging
 from datetime import datetime, timezone
@@ -50,10 +50,6 @@ def send_warning(slack: WebClient, channel_id: str, message_ts: str, text: str) 
     return _send_thread_message(slack, channel_id, message_ts, text, "warning")
 
 
-def send_reminder(slack: WebClient, channel_id: str, message_ts: str, text: str) -> bool:
-    return _send_thread_message(slack, channel_id, message_ts, text, "reminder")
-
-
 def _resolve_slack_client(
     workspace: Optional[str],
     slack_clients: dict[str, WebClient],
@@ -100,8 +96,8 @@ def process_reminders(
     """Notionポーリングによる警告・リマインド処理のメインロジック
 
     Approved かつ リマインド未送信のレコードを取得し、以下を処理:
-    - 警告送信日時が空 → 初回警告を送信 + 警告送信日時を記録
-    - 警告送信日時あり + hours_threshold経過 → リマインドを送信
+    - 警告送信日時が空 → 違反投稿スレッドに初回警告を送信 + 警告送信日時を記録
+    - 警告送信日時あり + hours_threshold経過 → Notion上でリマインド済みに更新（Slack送信なし）
 
     Args:
         slack: デフォルトのSlack WebClient
@@ -156,8 +152,17 @@ def process_reminders(
                 notion.mark_reminded(page_id)
             continue
 
-        # 警告送信日時が空 → 初回警告送信（Notion手動Approve等）
+        # 警告送信日時が空 → 初回警告を違反投稿スレッドに送信
         if fields["warning_sent_at"] is None:
+            # Lambda Bとの競合防止: 送信前にNotionを再取得して確認
+            fresh_page = notion.get_page(page_id)
+            if fresh_page:
+                fresh_fields = notion.extract_reminder_fields(fresh_page)
+                if fresh_fields["warning_sent_at"] is not None:
+                    logger.info("[SKIP] Already warned by Lambda B: %s", title)
+                    stats["skipped_not_elapsed"] += 1
+                    continue
+
             message = _build_message("警告", fields, notion_api_key, template_db_id)
             if dry_run:
                 logger.info("[DRY RUN] Would send warning: %s -> %s/%s (ws=%s)", title, channel_id, message_ts, workspace)
@@ -171,24 +176,21 @@ def process_reminders(
             stats["warned"] += 1
             continue
 
-        # 警告送信日時あり → 閾値経過チェック → リマインド送信
+        # 警告送信日時あり → 閾値経過チェック → Notion上でリマインド済みに更新（Slack送信なし）
         if not notion.is_past_threshold(fields["warning_sent_at"], hours_threshold):
             logger.info("[SKIP] Not yet %dh: %s", hours_threshold, title)
             stats["skipped_not_elapsed"] += 1
             continue
 
-        message = _build_message("リマインド", fields, notion_api_key, template_db_id)
         if dry_run:
-            logger.info("[DRY RUN] Would send reminder: %s -> %s/%s (ws=%s)", title, channel_id, message_ts, workspace)
+            logger.info("[DRY RUN] Would mark reminded: %s", title)
             stats["reminded"] += 1
         else:
-            if send_reminder(client, channel_id, message_ts, message):
-                logger.info("[SENT] Reminder sent: %s (ws=%s)", title, workspace)
+            if notion.mark_reminded(page_id):
+                logger.info("[REMINDED] Marked as reminded (Notion only): %s", title)
                 stats["reminded"] += 1
-                if not notion.mark_reminded(page_id):
-                    logger.error("Failed to mark reminded: %s", page_id)
-                    stats["errors"] += 1
             else:
+                logger.error("Failed to mark reminded: %s", page_id)
                 stats["errors"] += 1
 
     return stats
