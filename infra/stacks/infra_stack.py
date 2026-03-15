@@ -129,7 +129,7 @@ class InfraStack(Stack):
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 # TODO: 結合テスト時には無効化
-                "USE_MOCK_OPENAI": "true",
+                "USE_MOCK_OPENAI": "false",
             },
         )
 
