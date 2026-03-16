@@ -22,9 +22,14 @@ CSV の列定義:
 | noise              | ノイズの種類                              | 丁寧                         |
 
 アサーションの挙動:
+  【Detection】(違反判定)
   - pass  : output.is_violation が正解と一致するか否か
-  - score : is_violation 一致で 0.5、article_id 一致で 0.5（合計 0.0〜1.0）
-            非違反ケースでは is_violation 一致のみで 1.0
+  - score : is_violation 一致で 1.0、不一致で 0.0
+
+  【Article】(判定理由)
+  - pass  : テスト全体の合否に影響を与えないよう、条件に関わらず常に true
+  - score : 違反ケースは article_id が正解と完全一致で 1.0、不一致で 0.0
+            非違反ケースは判定理由を無視し、無条件で 1.0
 
 ## 使い方
 
@@ -111,20 +116,37 @@ def csv_to_promptfoo_yaml(csv_path: str, output_path: Path, limit: int | None = 
         article_label = f"条文:{violating_article}" if violating_article else "条文:なし"
         description = f"[{violation_label}] {article_label} / {length} / {intent} / {degree}"
 
-        overall_assert_value = (
-            "const isViolationCorrect = output.is_violation === context.vars.expected_is_violation;\n"
-            "const expectedArticle = context.vars.expected_violating_article;\n"
-            "const articleCorrect = !context.vars.expected_is_violation\n"
-            "  || (expectedArticle === '' || output.article_id === expectedArticle);\n"
-            "const score = (isViolationCorrect ? 0.5 : 0) + (articleCorrect ? 0.5 : 0);\n"
+        # Detection
+        detection_assert_value = (
+            "const isCorrect = output.is_violation === context.vars.expected_is_violation;\n"
             "return {\n"
-            "  pass: isViolationCorrect,\n"
-            "  score: score,\n"
-            "  reason: `is_violation: ${isViolationCorrect}, article_id: ${articleCorrect}`\n"
-            "    + ` (expected: ${expectedArticle || 'n/a'}, got: ${output.article_id})`\n"
+            "  pass: isCorrect,\n"
+            "  score: isCorrect ? 1.0 : 0.0,\n"
+            "  reason: `Detection - Expected: ${context.vars.expected_is_violation}, Got: ${output.is_violation}`\n"
             "};"
         )
 
+        # Aticle
+        article_assert_value = (
+            "const expectedIsViolation = context.vars.expected_is_violation;\n"
+            "const expectedArticle = context.vars.expected_violating_article || '';\n"
+            "const gotArticle = output.article_id || '';\n"
+            "let isCorrect = false;\n"
+            "let reason = '';\n"
+            "if (expectedIsViolation) {\n"
+            "  isCorrect = String(expectedArticle) === String(gotArticle);\n"
+            "  reason = isCorrect ? 'Match' : `Expected: ${expectedArticle}, Got: ${gotArticle}`;\n"
+            "} else {\n"
+            "  isCorrect = true;\n"
+            "  reason = 'Ignored (Non-violation case)';\n"
+            "}\n"
+            "return {\n"
+            "  pass: true,\n"
+            "  score: isCorrect ? 1.0 : 0.0,\n"
+            "  reason: `Article Check - ${reason}`\n"
+            "};"
+        )
+      
         confidence_assert_value = (
             "const isViolationCorrect = output.is_violation === context.vars.expected_is_violation;\n"
             "const confidence = output.confidence ?? 0;\n"
@@ -158,8 +180,13 @@ def csv_to_promptfoo_yaml(csv_path: str, output_path: Path, limit: int | None = 
                 "assert": [
                     {
                         "type": "javascript",
-                        "metric": "overall",
-                        "value": overall_assert_value,
+                        "metric": "Detection",
+                        "value": detection_assert_value,
+                    },
+                    {
+                        "type": "javascript",
+                        "metric": "Article",
+                        "value": article_assert_value,
                     },
                     {
                         "type": "javascript",

@@ -13,8 +13,65 @@ prompts:
 defaultTest:
   options:
     transform: JSON.parse(output)
+  assert:
+    - type: javascript
+      metric: Detection
+      value: |
+        const isCorrect = output.is_violation === context.vars.expected_is_violation;
+        return {
+          pass: isCorrect, 
+          score: isCorrect ? 1.0 : 0.0,
+          reason: `Detection - Expected: ${context.vars.expected_is_violation}, Got: ${output.is_violation}`
+        };
+
+    - type: javascript
+      metric: Article
+      weight: 0
+      value: |
+        const expectedIsViolation = context.vars.expected_is_violation;
+        const expectedArticle = context.vars.expected_violating_article || '';
+        const gotArticle = output.article_id || '';
+        let isCorrect = false;
+        let reason = '';
+        
+        if (expectedIsViolation) {
+          isCorrect = String(expectedArticle) === String(gotArticle);
+          reason = isCorrect ? 'Match' : `Expected: ${expectedArticle}, Got: ${gotArticle}`;
+        } else {
+          isCorrect = true;
+          reason = 'Ignored (Non-violation case)';
+        }
+        
+        return {
+          pass: true, 
+          score: isCorrect ? 1.0 : 0.0,
+          reason: `Article Check - ${reason}`
+        };
+
+    - type: javascript
+      metric: confidence
+      weight: 0 
+      value: |
+        const isViolationCorrect = output.is_violation === context.vars.expected_is_violation;
+        const confidence = output.confidence ?? 0;
+        const degree = context.vars.degree;
+        let score, reason;
+        
+        if (isViolationCorrect) {
+          score = degree === '明確な違反'
+            ? (confidence >= 0.8 ? 1.0 : confidence >= 0.6 ? 0.7 : 0.3)
+            : (confidence >= 0.5 ? 1.0 : 0.5);
+          reason = `correct, confidence=${confidence} (${degree})`;
+        } else {
+          score = Math.max(0, 1.0 - confidence);
+          reason = `wrong prediction, confidence=${confidence} (overconfidence penalty)`;
+        }
+        
+        return { 
+          pass: true, 
+          score, 
+          reason 
+        };
 
 tests:
-  - file://testcases.yml # サンプルテストケース
-  - file://datasets/testcases_preview.yaml # 評価データセット（先頭5件のプレビュー）
-  # - file://datasets/testcases.yaml # 全件評価（4968件）
+  - file://datasets/testcases_preview.yaml
