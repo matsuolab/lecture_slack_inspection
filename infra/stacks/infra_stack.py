@@ -8,6 +8,8 @@ from aws_cdk import (
     aws_ssm as ssm,
     aws_logs as logs,
     aws_iam as iam,
+    aws_events as events,
+    aws_events_targets as targets,
 )
 from constructs import Construct
 
@@ -79,6 +81,38 @@ class InfraStack(Stack):
             "NotionDbId",
             type="String",
             description="Notion Database ID to store violation logs.",
+        )
+
+        slack_bot_token_param_name = CfnParameter(
+            self,
+            "SlackBotTokenParamName",
+            type="String",
+            default="/slack/bot/token",
+            description="SSM Parameter name for Slack Bot Token (SecureString). Used by Lambda D.",
+        )
+
+        notion_template_db_id = CfnParameter(
+            self,
+            "NotionTemplateDbId",
+            type="String",
+            default="",
+            description="Notion Database ID for warning/reminder templates.",
+        )
+
+        reminder_hours_threshold = CfnParameter(
+            self,
+            "ReminderHoursThreshold",
+            type="Number",
+            default=48,
+            description="Hours after warning before marking as 48h_Over.",
+        )
+
+        remind_schedule_minutes = CfnParameter(
+            self,
+            "RemindScheduleMinutes",
+            type="Number",
+            default=5,
+            description="EventBridge schedule interval in minutes for Lambda D.",
         )
 
         # -----------------------------
@@ -170,7 +204,44 @@ class InfraStack(Stack):
         )
 
         # -----------------------------
-        # 5. IAM権限付与 (SSM Parameter Store)
+        # 6. Lambda D: リマインド定期実行 (app_remind)
+        # -----------------------------
+        lambda_d = _lambda.DockerImageFunction(
+            self,
+            "LambdaD_AppRemind",
+            code=_lambda.DockerImageCode.from_image_asset(
+                directory="../lambda/",
+                exclude=["app_inspect", "app_alert", "app_oauth"],
+            ),
+            timeout=Duration.seconds(60),
+            memory_size=512,
+            log_retention=logs.RetentionDays.ONE_WEEK,
+            environment={
+                "SLACK_BOT_TOKEN_PARAM_NAME": slack_bot_token_param_name.value_as_string,
+                "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
+                "NOTION_DB_ID": notion_db_id.value_as_string,
+                "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
+                "REMINDER_HOURS_THRESHOLD": reminder_hours_threshold.value_as_string,
+            },
+        )
+        lambda_d.node.default_child.add_property_override(
+            "ImageConfig",
+            {"Command": ["app_remind.handler.lambda_handler"]}
+        )
+
+        # EventBridge定期実行ルール
+        remind_rule = events.Rule(
+            self,
+            "RemindScheduleRule",
+            schedule=events.Schedule.rate(
+                Duration.minutes(remind_schedule_minutes.value_as_number)
+            ),
+            description="Trigger Lambda D (app_remind) periodically",
+        )
+        remind_rule.add_target(targets.LambdaFunction(lambda_d))
+
+        # -----------------------------
+        # 7. IAM権限付与 (SSM Parameter Store)
         # -----------------------------
         # TODO: 最小権限の原則に基づき、必要なパラメータARNのみを許可するように改善
         runtime_policy = iam.PolicyStatement(
@@ -184,7 +255,8 @@ class InfraStack(Stack):
 
         lambda_a.add_to_role_policy(runtime_policy)
         lambda_b.add_to_role_policy(runtime_policy)
-        
+        lambda_d.add_to_role_policy(runtime_policy)
+
         oauth_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter","ssm:PutParameter"],
             resources=[
@@ -211,13 +283,13 @@ class InfraStack(Stack):
         )
 
         slack_root = api.root.add_resource("slack")
-        events = slack_root.add_resource("events")
+        events_resource = slack_root.add_resource("events")
         interactions = slack_root.add_resource("interactions")
         oauth = slack_root.add_resource("oauth")
         callback = oauth.add_resource("callback")
 
         # POST /slack/events -> Lambda A
-        events.add_method(
+        events_resource.add_method(
             "POST",
             apigw.LambdaIntegration(lambda_a, proxy=True),
         )
