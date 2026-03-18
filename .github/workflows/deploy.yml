@@ -39,5 +39,4 @@ jobs:
       - name: CDK Deploy
         run: |
           npx aws-cdk@2 deploy --all --require-approval never \
-            --parameters AlertPrivateChannelId="${{ secrets.ALERT_CHANNEL_ID }}" \
             --parameters NotionDbId="${{ secrets.NOTION_DB_ID }}"
