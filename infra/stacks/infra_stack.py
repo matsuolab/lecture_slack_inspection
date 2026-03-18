@@ -52,6 +52,7 @@ class InfraStack(Stack):
             default="/slack/client/secret",
             description="SSM Parameter name for Slack Client Secret (SecureString).",
         )
+
         oauth_state_secret_param_name = CfnParameter(
             self,
             "OAuthStateSecretParamName",
@@ -59,6 +60,7 @@ class InfraStack(Stack):
             default="/slack/oauth/state",
             description="SSM Parameter name for OAuth state (SecureString).",
         )
+
         oauth_allowed_team_ids_param_name = CfnParameter(
             self,
             "OAuthAllowedTeamIdsParamName",
@@ -66,6 +68,7 @@ class InfraStack(Stack):
             default="/slack/oauth/allowed_team_ids",
             description="SSM Parameter name for allowed Slack team IDs (comma-separated).",
         )
+
         slack_bot_scopes = CfnParameter(
             self,
             "SlackBotScopes",
@@ -151,7 +154,7 @@ class InfraStack(Stack):
             "LambdaA_AppInspect",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_alert","app_oauth"],
+                exclude=["app_alert", "app_oauth"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -169,7 +172,7 @@ class InfraStack(Stack):
 
         lambda_a.node.default_child.add_property_override(
             "ImageConfig",
-            {"Command": ["app_inspect.handler.lambda_handler"]}
+            {"Command": ["app_inspect.handler.lambda_handler"]},
         )
 
         # -----------------------------
@@ -180,7 +183,7 @@ class InfraStack(Stack):
             "LambdaB_AppAlert",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect","app_oauth"],
+                exclude=["app_inspect", "app_oauth"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -195,7 +198,7 @@ class InfraStack(Stack):
 
         lambda_b.node.default_child.add_property_override(
             "ImageConfig",
-            {"Command": ["app_alert.handler.lambda_handler"]}
+            {"Command": ["app_alert.handler.lambda_handler"]},
         )
 
         # -----------------------------
@@ -206,7 +209,7 @@ class InfraStack(Stack):
             "LambdaC_SlackOAuth",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect","app_alert"],
+                exclude=["app_inspect", "app_alert"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -220,9 +223,10 @@ class InfraStack(Stack):
                 "SLACK_BOT_SCOPES": slack_bot_scopes.value_as_string,
             },
         )
+
         lambda_c.node.default_child.add_property_override(
             "ImageConfig",
-            {"Command": ["app_oauth.handler.lambda_handler"]}
+            {"Command": ["app_oauth.handler.lambda_handler"]},
         )
 
         # -----------------------------
@@ -246,9 +250,10 @@ class InfraStack(Stack):
                 "REMINDER_HOURS_THRESHOLD": reminder_hours_threshold.value_as_string,
             },
         )
+
         lambda_d.node.default_child.add_property_override(
             "ImageConfig",
-            {"Command": ["app_remind.handler.lambda_handler"]}
+            {"Command": ["app_remind.handler.lambda_handler"]},
         )
 
         # EventBridge定期実行ルール
@@ -270,6 +275,7 @@ class InfraStack(Stack):
             f"arn:aws:ssm:{self.region}:{self.account}:parameter"
             f"{slack_installation_param_prefix.value_as_string}/*"
         )
+
         runtime_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[
@@ -285,7 +291,7 @@ class InfraStack(Stack):
         lambda_d.add_to_role_policy(runtime_policy)
 
         oauth_policy = iam.PolicyStatement(
-            actions=["ssm:GetParameter","ssm:PutParameter"],
+            actions=["ssm:GetParameter", "ssm:PutParameter"],
             resources=[
                 f"arn:aws:ssm:{self.region}:{self.account}:parameter/slack*",
                 installation_param_arn,
@@ -298,7 +304,7 @@ class InfraStack(Stack):
         lambda_c.add_to_role_policy(oauth_policy)
 
         # -----------------------------
-        # 6. API Gateway (Slack エンドポイント)
+        # 8. API Gateway (Slack エンドポイント)
         # -----------------------------
         api = apigw.RestApi(
             self,
@@ -332,19 +338,21 @@ class InfraStack(Stack):
             "POST",
             apigw.LambdaIntegration(lambda_b, proxy=True),
         )
-        
-        # GET /slack/oauth/callback -> Lambda C
+
+        # GET /slack/oauth/start -> Lambda C
         start.add_method(
             "GET",
             apigw.LambdaIntegration(lambda_c, proxy=True),
         )
+
+        # GET /slack/oauth/callback -> Lambda C
         callback.add_method(
             "GET",
             apigw.LambdaIntegration(lambda_c, proxy=True),
         )
 
         # -----------------------------
-        # 7. Outputs
+        # 9. Outputs
         # -----------------------------
         CfnOutput(
             self,
@@ -352,6 +360,7 @@ class InfraStack(Stack):
             value=f"{api.url}slack/events",
             description="URL for Slack Event Subscription (Request URL)",
         )
+
         CfnOutput(
             self,
             "SlackInteractionsRequestUrl",
