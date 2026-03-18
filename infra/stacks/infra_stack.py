@@ -8,6 +8,8 @@ from aws_cdk import (
     aws_ssm as ssm,
     aws_logs as logs,
     aws_iam as iam,
+    aws_events as events,
+    aws_events_targets as targets,
 )
 from constructs import Construct
 
@@ -35,7 +37,7 @@ class InfraStack(Stack):
             description="SSM Parameter name for Slack Signing Secret (SecureString).",
         )
 
-        slacl_client_id_param_name = CfnParameter(
+        slack_client_id_param_name = CfnParameter(
             self,
             "SlackClientIdParamName",
             type="String",
@@ -49,6 +51,27 @@ class InfraStack(Stack):
             type="String",
             default="/slack/client/secret",
             description="SSM Parameter name for Slack Client Secret (SecureString).",
+        )
+        oauth_state_secret_param_name = CfnParameter(
+            self,
+            "OAuthStateSecretParamName",
+            type="String",
+            default="/slack/oauth/state",
+            description="SSM Parameter name for OAuth state (SecureString).",
+        )
+        oauth_allowed_team_ids_param_name = CfnParameter(
+            self,
+            "OAuthAllowedTeamIdsParamName",
+            type="String",
+            default="/slack/oauth/allowed_team_ids",
+            description="SSM Parameter name for allowed Slack team IDs (comma-separated).",
+        )
+        slack_bot_scopes = CfnParameter(
+            self,
+            "SlackBotScopes",
+            type="String",
+            default="chat:write,channels:read,channels:history,users:read,team:read,incoming-webhook",
+            description="Scopes used by /slack/oauth/start. Must match your app settings",
         )
 
         openai_api_key_param_name = CfnParameter(
@@ -67,12 +90,12 @@ class InfraStack(Stack):
             description="SSM Parameter name for Notion API Key (SecureString).",
         )
 
-        alert_private_channel_id = CfnParameter(
-            self,
-            "AlertPrivateChannelId",
-            type="String",
-            description="Slack private channel ID to post violation alerts (e.g., C0123...).",
-        )
+        # alert_private_channel_id = CfnParameter(
+        #     self,
+        #     "AlertPrivateChannelId",
+        #     type="String",
+        #     description="Slack private channel ID to post violation alerts (e.g., C0123...).",
+        # )
 
         notion_db_id = CfnParameter(
             self,
@@ -81,13 +104,35 @@ class InfraStack(Stack):
             description="Notion Database ID to store violation logs.",
         )
 
+        notion_template_db_id = CfnParameter(
+            self,
+            "NotionTemplateDbId",
+            type="String",
+            default="",
+            description="Notion Database ID for template entries.",
+        )
+        reminder_hours_threshold = CfnParameter(
+            self,
+            "ReminderHoursThreshold",
+            type="Number",
+            default=48,
+            description="Number of hours after which to send a reminder for unresolved violations.",
+        )
+        remind_schedule_minutes = CfnParameter(
+            self,
+            "RemindScheduleMinutes",
+            type="Number",
+            default=60,
+            description="Schedule interval in minutes for checking unresolved violations and sending reminders.",
+        )
+
+
         # -----------------------------
         # 2. SSMパラメータARNの構築ヘルパー
         # -----------------------------
         # SecureStringはCDKデプロイ時に値を取得できないため、ARNを構築してIAM権限で使用します
         def get_param_arn(param_name: str) -> str:
-            clean_name = param_name if not param_name.startswith("/") else param_name[1:]
-            return f"arn:aws:ssm:{self.region}:{self.account}:parameter/{clean_name}"
+            return f"arn:aws:ssm:{self.region}:{self.account}:parameter{param_name}"
 
         # -----------------------------
         # 3. Lambda A: Slack投稿監視 (app_inspect)
@@ -107,7 +152,6 @@ class InfraStack(Stack):
                 "SLACK_SIGNING_SECRET_PARAM_NAME": slack_signing_secret_param_name.value_as_string,
                 "OPENAI_API_KEY_PARAM_NAME": openai_api_key_param_name.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
-                "ALERT_PRIVATE_CHANNEL_ID": alert_private_channel_id.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 # TODO: 結合テスト時には無効化
                 "USE_MOCK_OPENAI": "false",
@@ -160,8 +204,11 @@ class InfraStack(Stack):
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
                 "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
-                "SLACK_CLIENT_ID_PARAM_NAME": slacl_client_id_param_name.value_as_string,
+                "SLACK_CLIENT_ID_PARAM_NAME": slack_client_id_param_name.value_as_string,
                 "SLACK_CLIENT_SECRET_PARAM_NAME": slack_client_secret_param_name.value_as_string,
+                "OAUTH_STATE_SECRET_PARAM_NAME": oauth_state_secret_param_name.value_as_string,
+                "OAUTH_ALLOWED_TEAM_IDS_PARAM_NAME": oauth_allowed_team_ids_param_name.value_as_string,
+                "SLACK_BOT_SCOPES": slack_bot_scopes.value_as_string,
             },
         )
         lambda_c.node.default_child.add_property_override(
@@ -170,13 +217,55 @@ class InfraStack(Stack):
         )
 
         # -----------------------------
+        # 6. Lambda D: 定期リマインド (app_remind)
+        # -----------------------------
+        lambda_d = _lambda.DockerImageFunction(
+            self,
+            "LambdaD_AppRemind",
+            code=_lambda.DockerImageCode.from_image_asset(
+                directory="../lambda/",
+                exclude=["app_inspect","app_alert","app_oauth"],
+            ),
+            timeout=Duration.seconds(30),
+            memory_size=512,
+            log_retention=logs.RetentionDays.ONE_WEEK,
+            environment={
+                "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
+                "SLACK_SIGNING_SECRET_PARAM_NAME": slack_signing_secret_param_name.value_as_string,
+                "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
+                "NOTION_DB_ID": notion_db_id.value_as_string,
+                "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
+                "REMINDER_HOURS_THRESHOLD": reminder_hours_threshold.value_as_number,
+            },
+        )
+        lambda_d.node.default_child.add_property_override(
+            "ImageConfig",
+            {"Command": ["app_remind.handler.lambda_handler"]}
+        )
+        # 定期実行のスケジュール (例: 1時間ごと)
+        remind_rule = events.Rule(
+            self,
+            "RemindScheduleRule",
+            schedule=events.Schedule.rate(
+                Duration.minutes(remind_schedule_minutes.value_as_number)
+                ),
+            description="Trigger LambdaD(app_remind) periodically",
+        )
+        remind_rule.add_target(lambda_d)
+
+        # -----------------------------
         # 5. IAM権限付与 (SSM Parameter Store)
         # -----------------------------
         # TODO: 最小権限の原則に基づき、必要なパラメータARNのみを許可するように改善
+        installation_param_arn = (
+            f"arn:aws:ssm:{self.region}:{self.account}:parameter"
+            f"{slack_installation_param_prefix.value_as_string}/*"
+        )
         runtime_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[
-                f"arn:aws:ssm:{self.region}:{self.account}:parameter/*",
+                installation_param_arn,
+                get_param_arn(slack_signing_secret_param_name.value_as_string),
                 get_param_arn(openai_api_key_param_name.value_as_string),
                 get_param_arn(notion_api_key_param_name.value_as_string),
             ],
@@ -184,11 +273,17 @@ class InfraStack(Stack):
 
         lambda_a.add_to_role_policy(runtime_policy)
         lambda_b.add_to_role_policy(runtime_policy)
+        lambda_d.add_to_role_policy(runtime_policy)
         
         oauth_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter","ssm:PutParameter"],
             resources=[
                 f"arn:aws:ssm:{self.region}:{self.account}:parameter/slack*",
+                installation_param_arn,
+                get_param_arn(slack_client_id_param_name.value_as_string),
+                get_param_arn(slack_client_secret_param_name.value_as_string),
+                get_param_arn(oauth_state_secret_param_name.value_as_string),
+                get_param_arn(oauth_allowed_team_ids_param_name.value_as_string),
             ],
         )
         lambda_c.add_to_role_policy(oauth_policy)
@@ -211,13 +306,14 @@ class InfraStack(Stack):
         )
 
         slack_root = api.root.add_resource("slack")
-        events = slack_root.add_resource("events")
+        events_resource = slack_root.add_resource("events")
         interactions = slack_root.add_resource("interactions")
         oauth = slack_root.add_resource("oauth")
+        start = oauth.add_resource("start")
         callback = oauth.add_resource("callback")
 
         # POST /slack/events -> Lambda A
-        events.add_method(
+        events_resource.add_method(
             "POST",
             apigw.LambdaIntegration(lambda_a, proxy=True),
         )
@@ -229,6 +325,10 @@ class InfraStack(Stack):
         )
         
         # GET /slack/oauth/callback -> Lambda C
+        start.add_method(
+            "GET",
+            apigw.LambdaIntegration(lambda_c, proxy=True),
+        )
         callback.add_method(
             "GET",
             apigw.LambdaIntegration(lambda_c, proxy=True),
@@ -248,6 +348,13 @@ class InfraStack(Stack):
             "SlackInteractionsRequestUrl",
             value=f"{api.url}slack/interactions",
             description="URL for Slack Interactivity (Request URL)",
+        )
+
+        CfnOutput(
+            self,
+            "SlackOAuthStartUrl",
+            value=f"{api.url}slack/oauth/start",
+            description="URL for Slack OAuth installation (Start URL)",
         )
 
         CfnOutput(
