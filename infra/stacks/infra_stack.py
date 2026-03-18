@@ -110,7 +110,7 @@ class InfraStack(Stack):
                 "ALERT_PRIVATE_CHANNEL_ID": alert_private_channel_id.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 # TODO: 結合テスト時には無効化
-                "USE_MOCK_OPENAI": "true",
+                "USE_MOCK_OPENAI": "false",
             },
         )
 
