@@ -21,9 +21,12 @@ def load_config(team_id: str) -> AlertConfig:
         return os.getenv(name, default)
     
     prefix = _get_env("SLACK_INSTALLATION_PARAM_PREFIX", default="/slack/installation").rstrip("/")
+    slack_bot_token = get_parameter_by_name(f"{prefix}/{team_id}/bot_token")
+    if not slack_bot_token:
+        raise RuntimeError(f"Missing Slack bot token for team {team_id}.")
     
     return AlertConfig(
-        slack_bot_token=get_parameter_by_name(f"{prefix}/{team_id}/bot_token"),
+        slack_bot_token=slack_bot_token,
         slack_signing_secret=load_signing_secret(),
         notion_api_key=get_secret("NOTION_API_KEY_PARAM_NAME"),
         
