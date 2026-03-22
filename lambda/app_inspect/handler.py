@@ -8,6 +8,7 @@ from openai import OpenAI
 # commonモジュールのインポート
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
+from common.template_manager import get_template_options
 from .services.config import load_config, load_signing_secret
 from .services.moderation import run_moderation
 from .components.slack_builder import encode_alert_button_value
@@ -177,6 +178,16 @@ def lambda_handler(event: dict, context: Any) -> dict:
             detection_method = getattr(result, "method", None) or "LLM"
             confidence_for_ui = result.confidence if detection_method == "LLM" else None
 
+        # テンプレートDBからプルダウン選択肢を動的生成
+        template_options = None
+        if cfg.notion_template_db_id:
+            try:
+                raw_options = get_template_options(cfg.notion_api_key, cfg.notion_template_db_id)
+                if raw_options:
+                    template_options = [(o["name"], o["page_id"]) for o in raw_options]
+            except Exception as e:
+                log_error(context, action="fetch_template_options", error=e)
+
         blocks = build_violation_alert_blocks(
             author_user_id=(raw_user_id or None),
             author_display=(profile_name or None),
@@ -190,6 +201,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             guideline_article=result.article_id,
             categories=result.categories,
             button_value=button_value,
+            warning_template_options=template_options,
         )
 
         slack_client.chat_postMessage(

@@ -39,4 +39,5 @@ jobs:
       - name: CDK Deploy
         run: |
           npx aws-cdk@2 deploy --all --require-approval never \
-            --parameters NotionDbId="${{ secrets.NOTION_DB_ID }}"
+            --parameters NotionDbId="${{ secrets.NOTION_DB_ID }}" \
+            --parameters NotionTemplateDbId="${{ secrets.NOTION_TEMPLATE_DB_ID }}"

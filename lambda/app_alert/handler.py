@@ -74,7 +74,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         if action_context.action_id == "approve_violation":
             log_info(context, action="exec_approve", page_id=page_id)
-            
+
             success = handle_approve_violation(
                 context=action_context,
                 slack=slack,
@@ -82,6 +82,8 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 reply_text=cfg.reply_prefix,
                 responder_id=responder_id,
                 responder_name=responder_name,
+                notion_api_key=cfg.notion_api_key,
+                notion_template_db_id=cfg.notion_template_db_id,
             )
 
         elif action_context.action_id == "dismiss_violation":

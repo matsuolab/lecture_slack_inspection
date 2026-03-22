@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from slack_sdk import WebClient
     from common.notion_client import NotionClient
 
+from common.template_manager import resolve_template, render_template
+
 logger = logging.getLogger(__name__)
 
 _ARTICLES_DIR = os.path.join(
@@ -27,6 +29,19 @@ class ActionContext:
     admin_message_ts: str | None
     # 運営メッセージの元 blocks（押下後も詳細を残すため）
     admin_blocks: list[dict[str, Any]] | None
+    # プルダウンで選択されたテンプレートのpage_id
+    selected_template_page_id: str | None
+
+
+def _extract_template_selection(payload: dict) -> str | None:
+    """block_actionsペイロードのstateからプルダウン選択値を取得"""
+    state = payload.get("state", {}).get("values", {})
+    template_block = state.get(_WARNING_TEMPLATE_BLOCK_ID, {})
+    for action_data in template_block.values():
+        selected = action_data.get("selected_option")
+        if selected:
+            return selected.get("value")
+    return None
 
 
 def parse_action_context(payload: dict) -> ActionContext | None:
@@ -57,6 +72,7 @@ def parse_action_context(payload: dict) -> ActionContext | None:
         admin_channel=container.get("channel_id"),
         admin_message_ts=container.get("message_ts"),
         admin_blocks=admin_blocks,
+        selected_template_page_id=_extract_template_selection(payload),
     )
 
 
@@ -135,6 +151,8 @@ def handle_approve_violation(
     reply_text: str,
     responder_id: str | None = None,
     responder_name: str | None = None,
+    notion_api_key: str = "",
+    notion_template_db_id: str = "",
 ) -> bool:
     origin_channel = context.value.get("origin_channel")
     origin_ts = context.value.get("origin_ts")
@@ -145,7 +163,13 @@ def handle_approve_violation(
         logger.error("Missing origin info for approve action")
         return False
 
-    warning_text = build_warning_text(reply_text, article_id)
+    template_body = resolve_template(
+        "警告",
+        api_key=notion_api_key,
+        db_id=notion_template_db_id,
+        template_page_id=context.selected_template_page_id or "",
+    )
+    warning_text = render_template(template_body, article=article_id or "")
 
     try:
         slack.chat_postMessage(

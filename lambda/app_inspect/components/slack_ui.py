@@ -7,11 +7,9 @@ WARNING_TEMPLATE_ACTION_ID = "warning_template_select"
 APPROVE_ACTION_ID = "approve_violation"
 DISMISS_ACTION_ID = "dismiss_violation"
 
-# プルダウン選択肢
+# テンプレートDBから取得できない場合のフォールバック選択肢
 DEFAULT_WARNING_TEMPLATE_OPTIONS: list[tuple[str, str]] = [
-    ("選択肢1", "option1"),
-    ("選択肢2", "option2"),
-    ("選択肢3", "option3"),
+    ("デフォルト警告文", ""),
 ]
 
 
