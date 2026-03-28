@@ -140,7 +140,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 channel=channel_name,
                 workspace=workspace_name,
                 result="Violation",
-                method="OpenAI",
+                method=getattr(result, "method", None) or "LLM",
                 reason=result.rationale,
                 severity=result.severity,
                 categories=result.categories,
