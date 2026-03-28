@@ -100,6 +100,14 @@ class InfraStack(Stack):
             description="Notion Database ID to store violation logs.",
         )
 
+        notion_articles_db_id = CfnParameter(
+            self,
+            "NotionArticlesDbId",
+            type="String",
+            default="",
+            description="Notion Database ID for articles master.",
+        )
+
         slack_bot_token_param_name = CfnParameter(
             self,
             "SlackBotTokenParamName",
@@ -159,6 +167,7 @@ class InfraStack(Stack):
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
+                "NOTION_ARTICLES_DB_ID": notion_articles_db_id.value_as_string,
                 "USE_MOCK_OPENAI": "false",
             },
         )

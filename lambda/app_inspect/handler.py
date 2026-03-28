@@ -106,7 +106,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         notion_page_id = None
 
         try:
-            notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
+            notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id, cfg.notion_articles_db_id)
 
             # Slack APIで名前を解決する
             try:
@@ -151,6 +151,11 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 team_id=team_id,
             )
             log_info(context, action="notion_page_created", page_id=notion_page_id)
+
+            if notion_page_id and result.article_id:
+                article_page_id = notion.find_article_page_id(result.article_id)
+                if article_page_id:
+                    notion.set_article_relation(notion_page_id, article_page_id)
 
         except Exception as e:
             log_error(context, action="external_service_call", error=e)

@@ -245,6 +245,12 @@ class NotionClient:
             "使用テンプレート": {"relation": [{"id": template_page_id}]},
         })
 
+    def set_article_relation(self, page_id: str, article_page_id: str) -> bool:
+        """対象条文Relationを設定"""
+        return self._update_page(page_id, {
+            "対象条文": {"relation": [{"id": article_page_id}]},
+        })
+
     def mark_48h_over(self, page_id: str) -> bool:
         """対応ステータスを 48h_Over に更新"""
         return self._update_page(page_id, {
