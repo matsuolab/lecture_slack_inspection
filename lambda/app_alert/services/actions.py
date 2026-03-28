@@ -1,5 +1,4 @@
 import json
-import os
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,10 +11,6 @@ if TYPE_CHECKING:
 from common.template_manager import resolve_template, render_template
 
 logger = logging.getLogger(__name__)
-
-_ARTICLES_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "common", "data"
-)
 
 # app_inspect/components/slack_ui.py に合わせた block_id
 _WARNING_TEMPLATE_BLOCK_ID = "warning_template"
@@ -76,42 +71,6 @@ def parse_action_context(payload: dict) -> ActionContext | None:
     )
 
 
-def _load_articles() -> dict[str, dict]:
-    """articles.json から id/article名 → 条文情報 のマップを返す"""
-    path = os.path.join(_ARTICLES_DIR, "articles.json")
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        mapping = {}
-        for a in data.get("articles", []):
-            mapping[a.get("id", "")] = a
-            mapping[a.get("article", "")] = a
-        return mapping
-    except Exception:
-        return {}
-
-
-def build_warning_text(default_text: str, article_id: str | None) -> str:
-    """article_id に該当する条文があれば条文名入りの警告文を返す"""
-    if not article_id:
-        return default_text
-
-    articles = _load_articles()
-    article = articles.get(article_id)
-    if not article:
-        return default_text
-
-    name = article.get("article", article_id)
-    content = article.get("content", "")
-
-    return (
-        f":warning: *ガイドライン違反の通知*\n\n"
-        f"この投稿は「{name}」に抵触する可能性があります。\n"
-        f"> {content[:200]}\n\n"
-        f"投稿の削除または修正をお願いします。"
-    )
-
-
 def _now_slack_datetime_token() -> str:
     now = datetime.now(timezone.utc)
     unix_sec = int(now.timestamp())
@@ -148,7 +107,6 @@ def handle_approve_violation(
     context: ActionContext,
     slack: "WebClient",
     notion: "NotionClient",
-    reply_text: str,
     responder_id: str | None = None,
     responder_name: str | None = None,
     notion_api_key: str = "",

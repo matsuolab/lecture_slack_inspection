@@ -12,7 +12,6 @@ class AlertConfig:
     # Env Vars
     notion_db_id: str
     notion_template_db_id: str
-    reply_prefix: str
 
 def load_signing_secret() -> str:
     return get_secret("SLACK_SIGNING_SECRET_PARAM_NAME")
@@ -33,8 +32,4 @@ def load_config(team_id: str) -> AlertConfig:
 
         notion_db_id=_get_env("NOTION_DB_ID"),
         notion_template_db_id=_get_env("NOTION_TEMPLATE_DB_ID"),
-        reply_prefix=_get_env(
-            "REPLY_PREFIX",
-            default="この投稿はコミュニティガイドラインに抵触する可能性があります。内容をご確認の上、削除または修正をお願いします。",
-        ),
     )

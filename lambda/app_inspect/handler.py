@@ -80,7 +80,8 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 rationale="[MOCK] 違反ワード検知",
                 recommended_reply="[MOCK] 削除を推奨します",
                 confidence=0.9,
-                article_id="mock_article_123"
+                article_id="mock_article_123",
+                method="Mock",
             )
         else:
             openai_client = OpenAI(api_key=cfg.openai_api_key)

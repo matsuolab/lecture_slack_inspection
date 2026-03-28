@@ -79,7 +79,6 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 context=action_context,
                 slack=slack,
                 notion=notion,
-                reply_text=cfg.reply_prefix,
                 responder_id=responder_id,
                 responder_name=responder_name,
                 notion_api_key=cfg.notion_api_key,
