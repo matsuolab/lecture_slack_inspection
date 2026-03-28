@@ -187,6 +187,8 @@ def handle_approve_violation(
             elif responder_id:
                 update_kwargs["responder_id"] = responder_id # 万が一名前が取れなかった時の保険
             notion.update_status(notion_page_id, "Approved", **update_kwargs)
+            if context.selected_template_page_id:
+                notion.set_template_relation(notion_page_id, context.selected_template_page_id)
             logger.info(f"Updated Notion {notion_page_id} to Approved")
 
         # 運営メッセージを「詳細は残して、ボタン/プルダウンだけ消す」形で更新 + 対応日時を表示
