@@ -1,6 +1,7 @@
 """削除リマインドサービス: Notionポーリングで初回警告送信 + 48h経過ステータス更新 + 削除リマインド送信"""
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -8,6 +9,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from common.notion_client import NotionClient
+from common.secret_manager import get_parameter_by_name
 from common.template_manager import resolve_template, render_template, compose_message
 
 logger = logging.getLogger(__name__)
@@ -58,8 +60,21 @@ def _resolve_slack_client(
     workspace: Optional[str],
     slack_clients: dict[str, WebClient],
     default_client: WebClient,
+    team_id: Optional[str] = None,
 ) -> WebClient:
-    """ワークスペース名からSlackクライアントを解決する"""
+    """ワークスペース名またはteam_idからSlackクライアントを解決する
+
+    優先順位:
+    1. team_id → OAuthで保存されたper-teamトークン (SSM)
+    2. workspace名 → 環境変数で設定されたワークスペース別トークン
+    3. デフォルトクライアント
+    """
+    if team_id:
+        prefix = os.getenv("SLACK_INSTALLATION_PARAM_PREFIX", "/slack/installation").rstrip("/")
+        token = get_parameter_by_name(f"{prefix}/{team_id}/bot_token")
+        if token:
+            return WebClient(token=token)
+
     if workspace and workspace in slack_clients:
         return slack_clients[workspace]
     return default_client
@@ -147,7 +162,7 @@ def process_reminders(
             continue
 
         channel_id, message_ts, workspace = parsed
-        client = _resolve_slack_client(workspace, slack_clients, slack)
+        client = _resolve_slack_client(workspace, slack_clients, slack, team_id=fields.get("team_id"))
 
         if not check_message_exists(client, channel_id, message_ts):
             logger.info("[DELETED] Message already deleted: %s", title)
@@ -255,7 +270,7 @@ def process_remind_requests(
             continue
 
         channel_id, message_ts, workspace = parsed
-        client = _resolve_slack_client(workspace, slack_clients, slack)
+        client = _resolve_slack_client(workspace, slack_clients, slack, team_id=fields.get("team_id"))
 
         if not check_message_exists(client, channel_id, message_ts):
             logger.info("[DELETED] Message already deleted: %s", title)

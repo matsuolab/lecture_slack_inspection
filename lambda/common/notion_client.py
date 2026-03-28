@@ -69,13 +69,14 @@ class NotionClient:
         result: str,
         method: str,
         reason: str = None,
-        severity: str = None,          
+        severity: str = None,
         categories: list[str] = None,
         workspace: str = None,
         post_link: str = None,
         article_id: str = None,
         confidence: float = None,
         message_ts: str = None,
+        team_id: str = None,
     ) -> Optional[str]:
         """違反ログを作成し、Page IDを返す"""
         if not self.db_id:
@@ -101,10 +102,10 @@ class NotionClient:
 
         if reason:
             props["違反理由"] = {"rich_text": [{"text": {"content": reason[:2000]}}]}
-        
+
         if severity:
             props["重大度"] = {"select": {"name": severity}}
-            
+
         if categories:
             props["違反カテゴリ"] = {"multi_select": [{"name": cat} for cat in categories]}
 
@@ -116,6 +117,9 @@ class NotionClient:
 
         if confidence is not None:
             props["信頼度"] = {"number": confidence}
+
+        if team_id:
+            props["team_id"] = {"rich_text": [{"text": {"content": team_id}}]}
 
         url = "https://api.notion.com/v1/pages"
         payload = {
@@ -289,6 +293,8 @@ class NotionClient:
         template_page_id = relation_items[0]["id"] if relation_items else ""
         article_relation = props.get("対象条文", {}).get("relation", [])
         article_page_id = article_relation[0]["id"] if article_relation else ""
+        team_id_texts = props.get("team_id", {}).get("rich_text", [])
+        team_id = team_id_texts[0]["plain_text"] if team_id_texts else None
         return {
             "page_id": page["id"],
             "post_link": post_link,
@@ -299,6 +305,7 @@ class NotionClient:
             "article_page_id": article_page_id,
             "additional_message": additional_message,
             "template_page_id": template_page_id,
+            "team_id": team_id,
         }
 
     @staticmethod

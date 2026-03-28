@@ -5,7 +5,6 @@ from slack_sdk import WebClient
 from slack_sdk.signature import SignatureVerifier
 from openai import OpenAI
 
-# commonモジュールのインポート
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
 from common.template_manager import get_template_options
@@ -24,19 +23,17 @@ def _decode_body(event: dict) -> str:
     return body
 
 def lambda_handler(event: dict, context: Any) -> dict:
-    # 1. コンテキスト初期化（この時点でSlackのIDなどが自動抽出される）
     context = build_context(event, context, service=SERVICE)
     total_timer = Timer()
     log_info(context, action="request_received")
 
     try:
-        # 1.5 Slackリトライ検出（3秒タイムアウト時の再送を即返却）
+        # Slackリトライ検出（3秒タイムアウト時の再送を即返却）
         raw_headers = event.get("headers") or {}
         lower_headers = {k.lower(): v for k, v in raw_headers.items()}
         if lower_headers.get("x-slack-retry-num"):
             log_info(context, action="retry_skip", retry_num=lower_headers["x-slack-retry-num"])
             return {"statusCode": 200, "body": "ok"}
-
 
         body = _decode_body(event)
         headers = event.get("headers") or {}
@@ -70,7 +67,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         if not text:
             return {"statusCode": 200, "body": "empty_text"}
 
-        # 6. モデレーション実行
+        # モデレーション実行
         log_info(context, action="start_moderation", text_length=len(text))
         inference_timer = Timer()
 
@@ -95,8 +92,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             log_info(context, action="judge", result="not_violation")
             return {"statusCode": 200, "body": "ok"}
 
-        # 7. 外部連携
-        # UIで使う値は try の外で初期化しておく（UI構築時の未定義事故を避ける）
+        # 外部連携（Slack名前解決 + Notion記録 + アラート送信）
         slack_client = WebClient(token=cfg.slack_bot_token)
 
         raw_user_id = ev.get("user", "")
@@ -152,6 +148,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 article_id=result.article_id,
                 confidence=result.confidence,
                 message_ts=ev["ts"],
+                team_id=team_id,
             )
             log_info(context, action="notion_page_created", page_id=notion_page_id)
 
@@ -169,8 +166,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             article_id=result.article_id,
         )
 
-        # UI定義（slack_ui.py）に委譲
-        # result.method に基づいて確信度の表示有無を決定す
+        # 検出方法に基づいて確信度の表示有無を決定
         if cfg.use_mock_openai:
             detection_method = "Mock"
             confidence_for_ui = None
