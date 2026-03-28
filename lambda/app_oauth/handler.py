@@ -7,8 +7,9 @@ import html
 import json
 import time
 import secrets
+import re
 
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlencode
 
 import requests
@@ -118,6 +119,15 @@ def _verify_state(state: str, max_age_seconds: int = 600) -> dict[str, Any]:
         raise ValueError("State has expired")
     return payload
 
+def _channel_hint_from_query(qs: dict[str, Any]) -> str | None:
+    raw = str(qs.get("channel") or "").strip()
+    if not raw:
+        return None
+    
+    if not re.fullmatch(r"[CG][A-Z0-9]+", raw):
+        raise ValueError("Invalid channel parameter")
+    return raw
+
 def _revoke_token(token: str) -> None:
     if not token:
         return
@@ -134,6 +144,10 @@ def _revoke_token(token: str) -> None:
 def _handle_start(event: dict[str, Any], context: Any) -> dict:
     qs = event.get("queryStringParameters") or {}
     team_hint = (qs.get("team") or "").strip() or None
+    try:
+        channel_hint = _channel_hint_from_query(qs)
+    except ValueError:
+        return _html(400, "Invalid channel parameter.")
     
     allowed = _allowed_team_ids()
     if team_hint and allowed and team_hint not in allowed:
@@ -148,6 +162,7 @@ def _handle_start(event: dict[str, Any], context: Any) -> dict:
             "iat": int(time.time()),
             "nonce": secrets.token_urlsafe(16),
             "team": team_hint,
+            "channel": channel_hint,
             "redirect_uri": redirect_uri,
         }
     )
@@ -214,8 +229,7 @@ def _handle_callback(event: dict[str, Any], context: Any) -> dict:
     team = payload.get("team") or {}
     team_id = team.get("id")
     access_token = payload.get("access_token")
-    incoming_webhook = payload.get("incoming_webhook") or {}
-    alert_channel_id = incoming_webhook.get("channel_id")
+    alert_channel_id = (state_payload.get("channel") or "").strip() or None
 
     if not team_id or not access_token:
         log_info(context, action="oauth_payload_error", result="fail", payload=payload)
@@ -238,23 +252,32 @@ def _handle_callback(event: dict[str, Any], context: Any) -> dict:
         log_info(context, action="oauth_team_mismatch", actual_team=team_id, expected_team=expected_team)
         return _html(403, "OAuth Workspace mismatch")
     
-    if not alert_channel_id:
-        _revoke_token(access_token)
-        return _html(400, "Missing alert channel information")
-    
     put_secure_parameter(f"{prefix}/{team_id}/bot_token", access_token)
-    put_secure_parameter(f"{prefix}/{team_id}/alert_channel_id", alert_channel_id)
+    if alert_channel_id:
+        put_secure_parameter(f"{prefix}/{team_id}/alert_channel_id", alert_channel_id)
+
     put_secure_parameter(f"{prefix}/{team_id}/installed_at", str(int(time.time())))
     log_info(context, action="oauth_install_saved", team_id=team_id, alert_channel_id=alert_channel_id)
-    return _html(
-        200,
-        (
-            "Slack app installation completed\n\n"
-            f"team_id: {html.escape(team_id)}\n\n"
-            f"alert_channel_id: {html.escape(alert_channel_id)}\n\n"
-            "You can close this page."
-        ),
-    )
+
+    body = [
+        "Slack app installation completed",
+        "",
+        f"Team ID: {html.escape(team_id)}",
+        "",
+    ]
+    if alert_channel_id:
+        body.extend([
+            f"alert_channel_id: {html.escape(alert_channel_id)}",
+            "",
+            "You can close this page.",
+        ])
+    else:
+        body.extend([
+            "alert_channel_id: (not configured)",
+            "",
+            "You can close this page, but configure alert_channel_id later before using alerts.",
+        ])
+    return _html(200, "\n".join(body))
 
 def _html(status_code: int, body: str) -> dict:
     return {

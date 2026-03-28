@@ -73,7 +73,7 @@ class InfraStack(Stack):
             self,
             "SlackBotScopes",
             type="String",
-            default="chat:write,channels:read,channels:history,users:read,team:read,incoming-webhook",
+            default="chat:write,channels:read,channels:history,users:read,team:read",
             description="Scopes used by /slack/oauth/start. Must match your app settings",
         )
 
