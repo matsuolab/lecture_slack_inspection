@@ -228,7 +228,7 @@ class ViolationDetector:
 
         try:
             resp = self.client.chat.completions.create(
-                model="gpt-4.1-nano",
+                model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 response_format=_get_response_format(),
                 temperature=0,

@@ -144,23 +144,23 @@ def handle_approve_violation(
                 update_kwargs["responder_id"] = responder_name
             elif responder_id:
                 update_kwargs["responder_id"] = responder_id # 万が一名前が取れなかった時の保険
-            notion.update_status(notion_page_id, "Approved", **update_kwargs)
+            notion.update_status(notion_page_id, "警告済み", **update_kwargs)
             if context.selected_template_page_id:
                 notion.set_template_relation(notion_page_id, context.selected_template_page_id)
-            logger.info(f"Updated Notion {notion_page_id} to Approved")
+            logger.info(f"Updated Notion {notion_page_id} to 警告済み")
 
         # 運営メッセージを「詳細は残して、ボタン/プルダウンだけ消す」形で更新 + 対応日時を表示
         if context.admin_channel and context.admin_message_ts:
             responder_text = f"<@{responder_id}>" if responder_id else "（不明）"
             handled_at = _now_slack_datetime_token()
-            status_text = f"✅ *Approved*（警告送信済み） by {responder_text} • {handled_at}"
+            status_text = f"✅ *警告済み* by {responder_text} • {handled_at}"
 
             blocks = _build_admin_updated_blocks(context.admin_blocks, status_text)
 
             slack.chat_update(
                 channel=context.admin_channel,
                 ts=context.admin_message_ts,
-                text="Approved",
+                text="警告済み",
                 blocks=blocks,
             )
 
@@ -188,8 +188,8 @@ def handle_dismiss_violation(
                 update_kwargs["responder_id"] = responder_name
             elif responder_id:
                 update_kwargs["responder_id"] = responder_id
-            notion.update_status(notion_page_id, "Dismissed", **update_kwargs)
-            logger.info(f"Updated Notion {notion_page_id} to Dismissed")
+            notion.update_status(notion_page_id, "対応不要", **update_kwargs)
+            logger.info(f"Updated Notion {notion_page_id} to 対応不要")
         else:
             logger.warning("Missing notion_page_id for dismiss action")
 
@@ -197,14 +197,14 @@ def handle_dismiss_violation(
         if context.admin_channel and context.admin_message_ts:
             responder_text = f"<@{responder_id}>" if responder_id else "（不明）"
             handled_at = _now_slack_datetime_token()
-            status_text = f"🚫 *Dismissed*（対応不要） by {responder_text} • {handled_at}"
+            status_text = f"🚫 *対応不要* by {responder_text} • {handled_at}"
 
             blocks = _build_admin_updated_blocks(context.admin_blocks, status_text)
 
             slack.chat_update(
                 channel=context.admin_channel,
                 ts=context.admin_message_ts,
-                text="Dismissed",
+                text="対応不要",
                 blocks=blocks,
             )
 

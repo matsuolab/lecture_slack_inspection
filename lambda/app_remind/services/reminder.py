@@ -96,7 +96,7 @@ def _build_message(usage: str, fields: dict, notion_api_key: str = "", template_
     )
     rendered = render_template(
         template_body,
-        article=fields.get("article_id") or "",
+        article=fields.get("article_name") or "",
         post_link=fields.get("post_link") or "",
         poster=fields.get("poster") or "",
     )
@@ -149,11 +149,11 @@ def process_reminders(
         page_id: str = fields["page_id"]
         title: str = fields["title"][:TITLE_TRUNCATE_LEN]
 
-        # 対象条文 Relation から条文名を解決（article_id より優先）
+        # 対象条文 Relation から条文名を解決
         if fields.get("article_page_id"):
             article_name = notion.get_article_name(fields["article_page_id"])
             if article_name:
-                fields["article_id"] = article_name
+                fields["article_name"] = article_name
 
         parsed = notion.parse_slack_link(fields["post_link"])
         if not parsed:
@@ -188,7 +188,7 @@ def process_reminders(
             else:
                 if send_warning(client, channel_id, message_ts, message):
                     logger.info("[WARNED] Warning sent: %s (ws=%s)", title, workspace)
-                    notion.update_status(page_id, "Approved", warning_sent_at=datetime.now(timezone.utc))
+                    notion.update_status(page_id, "警告済み", warning_sent_at=datetime.now(timezone.utc))
                 else:
                     stats["errors"] += 1
                     continue
@@ -259,7 +259,7 @@ def process_remind_requests(
         if fields.get("article_page_id"):
             article_name = notion.get_article_name(fields["article_page_id"])
             if article_name:
-                fields["article_id"] = article_name
+                fields["article_name"] = article_name
 
         parsed = notion.parse_slack_link(fields["post_link"])
         if not parsed:

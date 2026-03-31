@@ -82,16 +82,14 @@ class NotionClient:
         if not self.db_id:
             return None
 
-        title = post_content[:100]
-
         props: dict[str, Any] = {
-            "投稿内容": {"title": [{"text": {"content": title[:200]}}]},
+            "投稿内容": {"title": [{"text": {"content": post_content[:500]}}]},
             "投稿者": {"rich_text": [{"text": {"content": user_id}}]},
             "チャンネル": {"rich_text": [{"text": {"content": channel}}]},
             "検出日時": {"date": {"start": datetime.now().isoformat()}},
             "判定結果": {"select": {"name": result}},
             "検出方法": {"select": {"name": method}},
-            "対応ステータス": {"select": {"name": "Unprocessed"}},
+            "対応ステータス": {"select": {"name": "未対応"}},
         }
 
         if message_ts:
@@ -111,9 +109,6 @@ class NotionClient:
 
         if post_link:
             props["投稿リンク"] = {"url": post_link}
-
-        if article_id:
-            props["該当条文"] = {"rich_text": [{"text": {"content": article_id}}]}
 
         if confidence is not None:
             props["信頼度"] = {"number": confidence}
@@ -230,13 +225,13 @@ class NotionClient:
     def query_approved_unreminded(self) -> list[dict[str, Any]]:
         """Approved（初回警告 + 48h経過チェック対象）のレコードを取得"""
         return self._query({
-            "property": "対応ステータス", "select": {"equals": "Approved"},
+            "property": "対応ステータス", "select": {"equals": "警告済み"},
         })
 
     def query_remind_requested(self) -> list[dict[str, Any]]:
         """Remind_Requested（運営が削除リマインド依頼済み）のレコードを取得"""
         return self._query({
-            "property": "対応ステータス", "select": {"equals": "Remind_Requested"},
+            "property": "対応ステータス", "select": {"equals": "再警告依頼"},
         })
 
     def set_template_relation(self, page_id: str, template_page_id: str) -> bool:
@@ -252,15 +247,15 @@ class NotionClient:
         })
 
     def mark_48h_over(self, page_id: str) -> bool:
-        """対応ステータスを 48h_Over に更新"""
+        """対応ステータスを 期限超過 に更新"""
         return self._update_page(page_id, {
-            "対応ステータス": {"select": {"name": "48h_Over"}},
+            "対応ステータス": {"select": {"name": "期限超過"}},
         })
 
     def mark_reminded(self, page_id: str) -> bool:
-        """対応ステータスを Reminded に更新"""
+        """対応ステータスを 再警告済み に更新"""
         return self._update_page(page_id, {
-            "対応ステータス": {"select": {"name": "Reminded"}},
+            "対応ステータス": {"select": {"name": "再警告済み"}},
         })
 
     @staticmethod
@@ -291,8 +286,6 @@ class NotionClient:
         poster = poster_texts[0]["plain_text"] if poster_texts else None
         title_texts = props.get("投稿内容", {}).get("title", [])
         title = title_texts[0]["plain_text"] if title_texts else ""
-        article_texts = props.get("該当条文", {}).get("rich_text", [])
-        article_id = article_texts[0]["plain_text"] if article_texts else None
         additional_texts = props.get("追加メッセージ", {}).get("rich_text", [])
         additional_message = additional_texts[0]["plain_text"] if additional_texts else ""
         relation_items = props.get("使用テンプレート", {}).get("relation", [])
@@ -307,7 +300,6 @@ class NotionClient:
             "warning_sent_at": warning_sent_at,
             "poster": poster,
             "title": title,
-            "article_id": article_id,
             "article_page_id": article_page_id,
             "additional_message": additional_message,
             "template_page_id": template_page_id,

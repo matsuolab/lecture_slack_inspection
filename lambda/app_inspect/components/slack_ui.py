@@ -142,7 +142,7 @@ def build_violation_alert_blocks(
 
     reason_lines = [f"• *検出方法*: {method_part}"]
     if conf_part is not None:
-        reason_lines.append(f"• *確信度*: {conf_part}")
+        reason_lines.append(f"• *信頼度*: {conf_part}")
     reason_lines.append(f"• *判定理由*: {safe_rationale}")
 
     blocks.append(
