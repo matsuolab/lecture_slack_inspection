@@ -1,4 +1,4 @@
-"""3段階違反検出モジュール: NGワード → RAG → LLM"""
+"""違反検出モジュール: RAG関連条文検索 → LLM判定（gpt-4.1-nano）"""
 import json
 import re
 import math
@@ -110,26 +110,23 @@ class ViolationDetector:
         self._embedding_cache = {}
 
     def detect(self, text: str, course: str = None, skip_llm: bool = False) -> DetectionResult:
-        # Step 1: NGワード
-        ng_match = self._check_ng_patterns(text, course)
-        if ng_match:
-            aid = ng_match["article_id"]
-            title = self._article_title_by_id.get(aid)
-            reason = f"NGパターン検出: {ng_match['pattern'][:50]}"
-            if title:
-                reason = f"[{aid} {title}] {reason}"
-
-            return DetectionResult(
-                is_violation=True,
-                confidence=1.0,
-                method="NGワード",
-                article_id=aid,
-                category=ng_match["category"],
-                reason=reason,
-                step_stopped=1,
-            )
-
         if skip_llm:
+            ng_match = self._check_ng_patterns(text, course)
+            if ng_match:
+                aid = ng_match["article_id"]
+                title = self._article_title_by_id.get(aid)
+                reason = f"NGパターン検出: {ng_match['pattern'][:50]}"
+                if title:
+                    reason = f"[{aid} {title}] {reason}"
+                return DetectionResult(
+                    is_violation=True,
+                    confidence=1.0,
+                    method="NGワード",
+                    article_id=aid,
+                    category=ng_match["category"],
+                    reason=reason,
+                    step_stopped=1,
+                )
             return DetectionResult(
                 is_violation=False,
                 confidence=0.0,
@@ -140,10 +137,7 @@ class ViolationDetector:
                 step_stopped=1,
             )
 
-        # Step 2: RAG（関連条文を検索）
         relevant = self._find_relevant_articles(text, course, top_k=3)
-
-        # Step 3: LLM（条文付きで判定）
         result = self._judge_by_llm(text, relevant)
 
         aid = self._normalize_article_id(result.get("article_id"))
@@ -159,7 +153,7 @@ class ViolationDetector:
             article_id=aid,
             category=result.get("category"),
             reason=reason,
-            step_stopped=3,
+            step_stopped=2,
         )
 
     def _normalize_article_id(self, article_id: Optional[str]) -> Optional[str]:
@@ -225,7 +219,6 @@ class ViolationDetector:
         ]
 
     def _judge_by_llm(self, text: str, articles: list) -> dict:
-        # 重要: IDを含めて渡す（LLMがarticle_idを返せるようにする）
         articles_text = "\n".join(
             [f"- {a['id']} {a.get('article','')}: {a.get('content','')}" for a in articles]
         )
@@ -235,7 +228,7 @@ class ViolationDetector:
 
         try:
             resp = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4.1-nano",
                 messages=[{"role": "user", "content": prompt}],
                 response_format=_get_response_format(),
                 temperature=0,
