@@ -105,6 +105,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         workspace_name = raw_team_id
         post_link = None
         notion_page_id = None
+        article_display_name = result.article_id
 
         try:
             notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id, cfg.notion_articles_db_id)
@@ -153,10 +154,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
             )
             log_info(context, action="notion_page_created", page_id=notion_page_id)
 
-            if notion_page_id and result.article_id:
-                article_page_id = notion.find_article_page_id(result.article_id)
-                if article_page_id:
+            # 条文マスタから正式名称を解決し、Notion relationも設定
+            article_page_id = notion.find_article_page_id(result.article_id) if result.article_id else None
+            if article_page_id:
+                if notion_page_id:
                     notion.set_article_relation(notion_page_id, article_page_id)
+                article_display_name = notion.get_article_name(article_page_id) or article_display_name
 
         except Exception as e:
             log_error(context, action="external_service_call", error=e)
@@ -186,7 +189,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             try:
                 raw_options = get_template_options(cfg.notion_api_key, cfg.notion_template_db_id)
                 if raw_options:
-                    template_options = [(o["name"], o["page_id"]) for o in raw_options]
+                    template_options = [(o["name"], o["page_id"]) for o in raw_options if o.get("usage") == "警告"]
             except Exception as e:
                 log_error(context, action="fetch_template_options", error=e)
 
@@ -200,7 +203,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             detection_method=detection_method,
             confidence=confidence_for_ui,
             rationale=result.rationale,
-            guideline_article=result.article_id,
+            guideline_article=article_display_name,
             categories=result.categories,
             button_value=button_value,
             warning_template_options=template_options,

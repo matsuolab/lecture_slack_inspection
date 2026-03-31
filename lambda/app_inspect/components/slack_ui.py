@@ -153,7 +153,7 @@ def build_violation_alert_blocks(
         {
             "type": "context",
             "elements": [
-                {"type": "mrkdwn", "text": f"*該当条文*: {article_part}    |    *カテゴリ*: {category_part}"}
+                {"type": "mrkdwn", "text": f"*対象条文*: {article_part}    |    *カテゴリ*: {category_part}"}
             ],
         }
     )
@@ -181,14 +181,14 @@ def build_violation_alert_blocks(
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "削除勧告を送る"},
+                    "text": {"type": "plain_text", "text": "警告を送る"},
                     "style": "danger",
                     "action_id": APPROVE_ACTION_ID,
                     "value": button_value,
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "Dismiss（対応不要）"},
+                    "text": {"type": "plain_text", "text": "対応不要"},
                     "action_id": DISMISS_ACTION_ID,
                     "value": button_value,
                 },
