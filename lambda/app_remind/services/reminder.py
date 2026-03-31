@@ -223,10 +223,10 @@ def process_remind_requests(
     notion_api_key: str = "",
     template_db_id: str = "",
 ) -> dict[str, int]:
-    """Remind_Requested のレコードを検知し、Slackに削除リマインドを送信
+    """再警告依頼のレコードを検知し、Slackに再警告を送信
 
-    運営がNotionで 48h_Over → Remind_Requested に変更したレコードを取得し、
-    Slackスレッドに削除リマインドを送信後、ステータスを Reminded に更新する。
+    運営がNotionで 期限超過 → 再警告依頼 に変更したレコードを取得し、
+    Slackスレッドに再警告を送信後、ステータスを 再警告済み に更新する。
 
     Args:
         slack: デフォルトのSlack WebClient
@@ -279,7 +279,7 @@ def process_remind_requests(
                 notion.mark_reminded(page_id)
             continue
 
-        message = _build_message("リマインド", fields, notion_api_key, template_db_id)
+        message = _build_message("再警告", fields, notion_api_key, template_db_id)
         if dry_run:
             logger.info("[DRY RUN] Would send reminder: %s -> %s/%s (ws=%s)", title, channel_id, message_ts, workspace)
             stats["reminded"] += 1
