@@ -284,7 +284,7 @@ class TestProcessReminders:
         mock_notion.is_past_threshold = NotionClient.is_past_threshold
         mock_notion.parse_slack_link = NotionClient.parse_slack_link
         mock_notion.mark_48h_over.return_value = True
-        mock_notion.mark_reminded.return_value = True
+        mock_notion.mark_closed.return_value = True
         mock_notion.update_status.return_value = True
         # get_page: デフォルトではページをそのまま返す（再取得でも同じ状態）
         mock_notion.get_page.side_effect = lambda pid: next(

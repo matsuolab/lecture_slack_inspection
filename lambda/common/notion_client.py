@@ -230,6 +230,15 @@ class NotionClient:
             "property": "対応ステータス", "select": {"equals": "警告済み"},
         })
 
+    def query_rewarn_unsent(self) -> list[dict[str, Any]]:
+        """再警告済みだが再警告送信日時が空のレコードを取得（Notion手動ルート）"""
+        return self._query({
+            "and": [
+                {"property": "対応ステータス", "select": {"equals": "再警告済み"}},
+                {"property": "再警告送信日時", "date": {"is_empty": True}},
+            ]
+        })
+
     def set_template_relation(self, page_id: str, template_page_id: str) -> bool:
         """使用テンプレートRelationを設定"""
         return self._update_page(page_id, {
@@ -246,12 +255,6 @@ class NotionClient:
         """対応ステータスを 期限超過 に更新"""
         return self._update_page(page_id, {
             "対応ステータス": {"select": {"name": "期限超過"}},
-        })
-
-    def mark_reminded(self, page_id: str) -> bool:
-        """対応ステータスを 再警告済み に更新"""
-        return self._update_page(page_id, {
-            "対応ステータス": {"select": {"name": "再警告済み"}},
         })
 
     def mark_closed(self, page_id: str, responder_name: str = "") -> bool:
@@ -326,6 +329,12 @@ class NotionClient:
         article_page_id = article_relation[0]["id"] if article_relation else ""
         team_id_texts = props.get("team_id", {}).get("rich_text", [])
         team_id = team_id_texts[0]["plain_text"] if team_id_texts else None
+        rewarn_date_obj = props.get("再警告送信日時", {}).get("date")
+        rewarn_sent_at = None
+        if rewarn_date_obj and rewarn_date_obj.get("start"):
+            rewarn_sent_at = rewarn_date_obj["start"]
+        rewarn_tmpl_items = props.get("再警告テンプレート", {}).get("relation", [])
+        rewarn_template_page_id = rewarn_tmpl_items[0]["id"] if rewarn_tmpl_items else ""
         admin_ch_texts = props.get("通知チャンネルID", {}).get("rich_text", [])
         admin_channel_id = admin_ch_texts[0]["plain_text"] if admin_ch_texts else ""
         admin_ts_texts = props.get("通知メッセージTS", {}).get("rich_text", [])
@@ -340,6 +349,8 @@ class NotionClient:
             "additional_message": additional_message,
             "template_page_id": template_page_id,
             "team_id": team_id,
+            "rewarn_sent_at": rewarn_sent_at,
+            "rewarn_template_page_id": rewarn_template_page_id,
             "admin_channel_id": admin_channel_id,
             "admin_message_ts": admin_message_ts,
         }

@@ -10,7 +10,7 @@ from common.notion_client import NotionClient
 from common.secret_manager import get_secret
 from common.health import write_health
 from .services.config import load_config
-from .services.reminder import process_reminders
+from .services.reminder import process_reminders, process_rewarn_from_notion
 
 SERVICE = "app_remind"
 
@@ -52,8 +52,17 @@ def lambda_handler(event: dict, context: Any) -> dict:
             template_db_id=cfg.template_db_id,
         )
 
+        rewarn_stats = process_rewarn_from_notion(
+            slack=slack,
+            notion=notion,
+            slack_clients=workspace_clients,
+            notion_api_key=cfg.notion_api_key,
+            template_db_id=cfg.template_db_id,
+        )
+
         elapsed_ms = total_timer.ms()
-        log_info(ctx, action="completed", stats=stats, elapsed_ms=round(elapsed_ms, 1))
+        log_info(ctx, action="completed", stats=stats, rewarn_stats=rewarn_stats,
+                 elapsed_ms=round(elapsed_ms, 1))
         emit_metric(ctx, "TotalLatencyMs", elapsed_ms, unit="Milliseconds")
 
         write_health(SERVICE, "正常", notion_api_key=cfg.notion_api_key)

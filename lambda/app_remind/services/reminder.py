@@ -299,3 +299,86 @@ def process_reminders(
                 stats["errors"] += 1
 
     return stats
+
+
+def process_rewarn_from_notion(
+    slack: WebClient,
+    notion: NotionClient,
+    dry_run: bool = False,
+    slack_clients: Optional[dict[str, WebClient]] = None,
+    notion_api_key: str = "",
+    template_db_id: str = "",
+) -> dict[str, int]:
+    """Notion手動ルート: 再警告済み + 再警告送信日時空のレコードを処理
+
+    運営がNotionで対応ステータスを「再警告済み」に変更したレコードを検知し、
+    テンプレート + 追加メッセージを結合してSlackに再警告を送信する。
+    """
+    if slack_clients is None:
+        slack_clients = {}
+
+    stats: dict[str, int] = {
+        "queried": 0,
+        "sent": 0,
+        "skipped_no_link": 0,
+        "already_deleted": 0,
+        "errors": 0,
+    }
+
+    pages = notion.query_rewarn_unsent()
+    stats["queried"] = len(pages)
+    logger.info("Found %d rewarn_unsent records", len(pages))
+
+    for page in pages:
+        fields = notion.extract_reminder_fields(page)
+        page_id: str = fields["page_id"]
+        title: str = fields["title"][:TITLE_TRUNCATE_LEN]
+
+        # 対象条文 Relation から条文名を解決
+        if fields.get("article_page_id"):
+            article_name = notion.get_article_name(fields["article_page_id"])
+            if article_name:
+                fields["article_name"] = article_name
+
+        parsed = notion.parse_slack_link(fields["post_link"])
+        if not parsed:
+            logger.warning("[SKIP] No valid post_link: %s", title)
+            stats["skipped_no_link"] += 1
+            continue
+
+        channel_id, message_ts, workspace = parsed
+        client = _resolve_slack_client(
+            workspace, slack_clients, slack, team_id=fields.get("team_id"),
+        )
+
+        if not check_message_exists(client, channel_id, message_ts):
+            logger.info("[DELETED] Message already deleted: %s", title)
+            stats["already_deleted"] += 1
+            if not dry_run:
+                notion.mark_closed(page_id)
+                _notify_deleted(client, fields)
+            continue
+
+        # 再警告テンプレートRelationがあればそれを使用、なければデフォルト
+        fields["template_page_id"] = fields.get("rewarn_template_page_id", "")
+        message = _build_message("再警告", fields, notion_api_key, template_db_id)
+
+        if dry_run:
+            logger.info(
+                "[DRY RUN] Would send rewarn: %s -> %s/%s (ws=%s)",
+                title, channel_id, message_ts, workspace,
+            )
+            stats["sent"] += 1
+        else:
+            if _send_thread_message(client, channel_id, message_ts, message, "rewarn"):
+                logger.info("[REWARNED] Rewarn sent: %s (ws=%s)", title, workspace)
+                notion.update_rewarn_info(
+                    page_id,
+                    rewarn_sent_at=datetime.now(timezone.utc),
+                    template_page_id=fields.get("rewarn_template_page_id", ""),
+                )
+                stats["sent"] += 1
+            else:
+                stats["errors"] += 1
+
+    return stats
