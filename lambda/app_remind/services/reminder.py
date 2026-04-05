@@ -127,15 +127,17 @@ def _send_48h_notification(
         except Exception as e:
             logger.error("Failed to fetch rewarn template options: %s", e)
 
-    button_value = encode_alert_button_value(
-        notion_page_id=page_id,
-        origin_channel=fields.get("post_link", ""),
-        article_id=fields.get("article_page_id", ""),
-    )
-
-    # 投稿リンクからchannel_idを取得
+    # 投稿リンクからchannel_id, message_tsを取得
     parsed = notion.parse_slack_link(fields.get("post_link"))
     origin_channel_id = parsed[0] if parsed else ""
+    origin_ts = parsed[1] if parsed else ""
+
+    button_value = encode_alert_button_value(
+        notion_page_id=page_id,
+        origin_channel=origin_channel_id,
+        origin_ts=origin_ts,
+        article_id=fields.get("article_name", ""),
+    )
 
     blocks = build_48h_alert_blocks(
         post_link=fields.get("post_link"),
