@@ -9,9 +9,7 @@ from common.notion_client import NotionClient
 from app_remind.services.reminder import (
     check_message_exists,
     send_warning,
-    send_reminder,
     process_reminders,
-    process_remind_requests,
     _resolve_slack_client,
 )
 from common.template_manager import (
@@ -58,7 +56,7 @@ class TestExtractReminderFields:
                 "警告送信日時": {"date": {"start": "2026-01-01T00:00:00Z"}},
                 "投稿者": {"rich_text": [{"plain_text": "U_USER"}]},
                 "投稿内容": {"title": [{"plain_text": "テスト投稿"}]},
-                "該当条文": {"rich_text": [{"plain_text": "第3条"}]},
+                "対象条文": {"relation": [{"id": "article-page-1"}]},
             },
         }
         fields = NotionClient.extract_reminder_fields(page)
@@ -67,7 +65,9 @@ class TestExtractReminderFields:
         assert fields["warning_sent_at"] == "2026-01-01T00:00:00Z"
         assert fields["poster"] == "U_USER"
         assert fields["title"] == "テスト投稿"
-        assert fields["article_id"] == "第3条"
+        assert fields["article_page_id"] == "article-page-1"
+        assert "admin_channel_id" in fields
+        assert "admin_message_ts" in fields
 
     def test_no_warning_sent_at_returns_none(self):
         page = {
@@ -105,8 +105,10 @@ class TestExtractReminderFields:
         assert fields["page_id"] == "p"
         assert fields["post_link"] is None
         assert fields["warning_sent_at"] is None
-        assert fields["article_id"] is None
+        assert fields["article_page_id"] == ""
         assert fields["template_page_id"] == ""
+        assert fields["admin_channel_id"] == ""
+        assert fields["admin_message_ts"] == ""
 
     def test_relation_template(self):
         page = {
@@ -313,7 +315,7 @@ class TestProcessReminders:
 
         assert stats["already_deleted"] == 1
         mock_slack.chat_postMessage.assert_not_called()
-        mock_notion.mark_reminded.assert_called_once()
+        mock_notion.mark_closed.assert_called_once()
 
     def test_not_elapsed(self):
         recent = (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat()
@@ -394,7 +396,7 @@ class TestProcessReminders:
         assert call_args.kwargs["thread_ts"] == "1234567890.123456"
         mock_notion.update_status.assert_called_once()
         assert mock_notion.update_status.call_args.args[0] == "p1"
-        assert mock_notion.update_status.call_args.args[1] == "Approved"
+        assert mock_notion.update_status.call_args.args[1] == "警告済み"
         assert mock_notion.update_status.call_args.kwargs.get("warning_sent_at") is not None
 
     def test_initial_warning_uses_fallback_template(self):
@@ -436,7 +438,7 @@ class TestProcessReminders:
         assert stats["already_deleted"] == 1
         assert stats["warned"] == 0
         mock_slack.chat_postMessage.assert_not_called()
-        mock_notion.mark_reminded.assert_called_once()
+        mock_notion.mark_closed.assert_called_once()
 
     def test_mixed_warning_and_48h_over(self):
         """初回警告対象と48h経過対象が混在"""
@@ -485,7 +487,6 @@ class TestProcessReminders:
         }
         page = self._make_page(has_warning=False)
         page["properties"]["対象条文"] = {"relation": [{"id": "article-page-1"}]}
-        page["properties"]["該当条文"] = {"rich_text": [{"plain_text": "11-iv"}]}
         mock_notion = self._setup_notion_mock([page])
         mock_notion.get_article_name.return_value = "AI Community参加規約 第11条(iv)"
 
@@ -504,7 +505,6 @@ class TestProcessReminders:
         }
         page = self._make_page(has_warning=False)
         page["properties"]["対象条文"] = {"relation": []}
-        page["properties"]["該当条文"] = {"rich_text": [{"plain_text": "11-iv"}]}
         mock_notion = self._setup_notion_mock([page])
 
         with patch("app_remind.services.reminder.resolve_template") as mock_resolve:
@@ -512,8 +512,6 @@ class TestProcessReminders:
             stats = process_reminders(slack=mock_slack, notion=mock_notion, hours_threshold=48)
 
         assert stats["warned"] == 1
-        call_args = mock_slack.chat_postMessage.call_args
-        assert "11-ivに違反" in call_args.kwargs["text"]
         mock_notion.get_article_name.assert_not_called()
 
 
@@ -661,89 +659,3 @@ class TestGetTemplateByPageId:
         assert result is None
 
 
-# ---- process_remind_requests ----
-
-class TestProcessRemindRequests:
-    def _make_page(self, page_id="p1", link="https://ws.slack.com/archives/C123/p1234567890123456"):
-        return {
-            "id": page_id,
-            "properties": {
-                "投稿リンク": {"url": link},
-                "警告送信日時": {"date": {"start": (datetime.now(timezone.utc) - timedelta(hours=50)).isoformat()}},
-                "投稿者": {"rich_text": [{"plain_text": "U_TEST"}]},
-                "投稿内容": {"title": [{"plain_text": "テスト投稿"}]},
-            },
-        }
-
-    def _setup_notion_mock(self, pages):
-        mock_notion = MagicMock(spec=NotionClient)
-        mock_notion.query_remind_requested.return_value = pages
-        mock_notion.extract_reminder_fields = NotionClient.extract_reminder_fields
-        mock_notion.parse_slack_link = NotionClient.parse_slack_link
-        mock_notion.mark_reminded.return_value = True
-        return mock_notion
-
-    def test_remind_requested_sends_slack(self):
-        """Remind_Requested → Slackにリマインド送信 + Reminded更新"""
-        mock_slack = MagicMock()
-        mock_slack.conversations_history.return_value = {
-            "messages": [{"ts": "1234567890.123456"}]
-        }
-        mock_notion = self._setup_notion_mock([self._make_page()])
-
-        stats = process_remind_requests(slack=mock_slack, notion=mock_notion)
-
-        assert stats["reminded"] == 1
-        mock_slack.chat_postMessage.assert_called_once()
-        call_args = mock_slack.chat_postMessage.call_args
-        assert call_args.kwargs["channel"] == "C123"
-        assert call_args.kwargs["thread_ts"] == "1234567890.123456"
-        mock_notion.mark_reminded.assert_called_once_with("p1")
-
-    def test_remind_requested_message_deleted(self):
-        """投稿が削除済み → Slack送信なし、Reminded更新"""
-        mock_slack = MagicMock()
-        mock_slack.conversations_history.return_value = {"messages": []}
-        mock_notion = self._setup_notion_mock([self._make_page()])
-
-        stats = process_remind_requests(slack=mock_slack, notion=mock_notion)
-
-        assert stats["already_deleted"] == 1
-        assert stats["reminded"] == 0
-        mock_slack.chat_postMessage.assert_not_called()
-        mock_notion.mark_reminded.assert_called_once()
-
-    def test_remind_requested_no_records(self):
-        mock_slack = MagicMock()
-        mock_notion = MagicMock(spec=NotionClient)
-        mock_notion.query_remind_requested.return_value = []
-
-        stats = process_remind_requests(slack=mock_slack, notion=mock_notion)
-
-        assert stats["queried"] == 0
-        mock_slack.chat_postMessage.assert_not_called()
-
-    def test_remind_requested_dry_run(self):
-        mock_slack = MagicMock()
-        mock_slack.conversations_history.return_value = {
-            "messages": [{"ts": "1234567890.123456"}]
-        }
-        mock_notion = self._setup_notion_mock([self._make_page()])
-
-        stats = process_remind_requests(slack=mock_slack, notion=mock_notion, dry_run=True)
-
-        assert stats["reminded"] == 1
-        mock_slack.chat_postMessage.assert_not_called()
-        mock_notion.mark_reminded.assert_not_called()
-
-    def test_remind_requested_no_link(self):
-        mock_slack = MagicMock()
-        page = self._make_page()
-        page["properties"]["投稿リンク"] = {"url": None}
-        mock_notion = self._setup_notion_mock([page])
-
-        stats = process_remind_requests(slack=mock_slack, notion=mock_notion)
-
-        assert stats["skipped_no_link"] == 1
-        mock_slack.chat_postMessage.assert_not_called()
-        mock_notion.mark_reminded.assert_called_once()

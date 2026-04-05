@@ -82,4 +82,4 @@ def test_A_to_B_flow_dismiss_updates_notion(
     mock_notion.update_status.assert_called_once()
     call_args = mock_notion.update_status.call_args
     assert call_args.args[0] == value_from_A["notion_page_id"]
-    assert call_args.args[1] == "Dismissed"
+    assert call_args.args[1] == "対応不要"
