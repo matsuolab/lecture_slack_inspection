@@ -1,4 +1,4 @@
-"""Lambda D (app_remind): EventBridgeトリガーで警告・48h経過チェック・削除リマインド送信"""
+"""Lambda D (app_remind): EventBridgeトリガーで警告・48h経過通知・削除検知"""
 
 import os
 from typing import Any
@@ -8,8 +8,9 @@ from slack_sdk import WebClient
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
 from common.secret_manager import get_secret
+from common.health import write_health
 from .services.config import load_config
-from .services.reminder import process_reminders, process_remind_requests
+from .services.reminder import process_reminders
 
 SERVICE = "app_remind"
 
@@ -51,21 +52,15 @@ def lambda_handler(event: dict, context: Any) -> dict:
             template_db_id=cfg.template_db_id,
         )
 
-        remind_stats = process_remind_requests(
-            slack=slack,
-            notion=notion,
-            slack_clients=workspace_clients,
-            notion_api_key=cfg.notion_api_key,
-            template_db_id=cfg.template_db_id,
-        )
-
         elapsed_ms = total_timer.ms()
-        log_info(ctx, action="completed", stats=stats, remind_stats=remind_stats, elapsed_ms=round(elapsed_ms, 1))
+        log_info(ctx, action="completed", stats=stats, elapsed_ms=round(elapsed_ms, 1))
         emit_metric(ctx, "TotalLatencyMs", elapsed_ms, unit="Milliseconds")
 
+        write_health(SERVICE, "正常", notion_api_key=cfg.notion_api_key)
         return {"statusCode": 200, "body": "ok"}
 
     except Exception as e:
         log_error(ctx, action="handler_failed", error=e)
         emit_metric(ctx, "RemindError", 1)
+        write_health(SERVICE, "エラー", str(e))
         return {"statusCode": 200, "body": "error_handled"}

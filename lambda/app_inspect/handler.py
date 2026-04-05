@@ -8,6 +8,7 @@ from openai import OpenAI
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
 from common.template_manager import get_template_options
+from common.health import write_health
 from .services.config import load_config, load_signing_secret
 from .services.moderation import run_moderation
 from .components.slack_builder import encode_alert_button_value
@@ -57,7 +58,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         if not team_id:
             log_info(context, action="missing_team_id", result="fail")
             return {"statusCode": 400, "body": "missing team_id"}
-        
+
         cfg = load_config(team_id)
         ev = body_json.get("event", {})
         if body_json.get("type") != "event_callback" or ev.get("type") != "message" or ev.get("bot_id") or ev.get("subtype"):
@@ -209,18 +210,31 @@ def lambda_handler(event: dict, context: Any) -> dict:
             warning_template_options=template_options,
         )
 
-        slack_client.chat_postMessage(
+        alert_resp = slack_client.chat_postMessage(
             channel=cfg.alert_private_channel_id,
             text="【違反検知アラート】",
             blocks=blocks
         )
 
+        # 管理ch通知のts・チャンネルIDをNotionに保存（48h通知のスレッド返信に使用）
+        if notion_page_id and alert_resp.get("ok"):
+            try:
+                notion.update_admin_notification(
+                    notion_page_id,
+                    admin_channel_id=cfg.alert_private_channel_id,
+                    admin_message_ts=alert_resp["ts"],
+                )
+            except Exception as e:
+                log_error(context, action="save_admin_notification", error=e)
+
         log_info(context, action="alert_sent", result="success", page_id=notion_page_id)
         emit_metric(context, "TotalLatencyMs", total_timer.ms(), unit="Milliseconds")
 
+        write_health(SERVICE, "正常", notion_api_key=cfg.notion_api_key)
         return {"statusCode": 200, "body": "ok"}
 
     except Exception as e:
         log_error(context, action="handler_process", error=e)
         emit_metric(context, "handler_error", 1)
+        write_health(SERVICE, "エラー", str(e))
         return {"statusCode": 200, "body": "error_handled"}

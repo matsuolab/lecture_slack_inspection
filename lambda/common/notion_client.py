@@ -12,10 +12,12 @@ _SLACK_WORKSPACE_PATTERN = re.compile(r"https://([^.]+)\.slack\.com/")
 
 
 class NotionClient:
-    def __init__(self, api_key: str, db_id: str, articles_db_id: str = ""):
+    def __init__(self, api_key: str, db_id: str, articles_db_id: str = "",
+                 health_db_id: str = ""):
         self.api_key = api_key
         self.db_id = db_id
         self.articles_db_id = articles_db_id
+        self.health_db_id = health_db_id
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Notion-Version": "2022-06-28",
@@ -209,14 +211,14 @@ class NotionClient:
         warning_sent_at: datetime = None,
         responder_id: str = None,
     ) -> bool:
-        """ページのステータスを更新する。対応者・警告送信日時も任意で記録。"""
+        """ページのステータスを更新する。初回対応者・警告送信日時も任意で記録。"""
         props: dict[str, Any] = {
             "対応ステータス": {"select": {"name": status}}
         }
         if warning_sent_at:
             props["警告送信日時"] = {"date": {"start": warning_sent_at.isoformat()}}
         if responder_id:
-            props["対応者"] = {"rich_text": [{"text": {"content": responder_id}}]}
+            props["初回対応者"] = {"rich_text": [{"text": {"content": responder_id}}]}
 
         return self._update_page(page_id, props)
 
@@ -226,12 +228,6 @@ class NotionClient:
         """Approved（初回警告 + 48h経過チェック対象）のレコードを取得"""
         return self._query({
             "property": "対応ステータス", "select": {"equals": "警告済み"},
-        })
-
-    def query_remind_requested(self) -> list[dict[str, Any]]:
-        """Remind_Requested（運営が削除リマインド依頼済み）のレコードを取得"""
-        return self._query({
-            "property": "対応ステータス", "select": {"equals": "再警告依頼"},
         })
 
     def set_template_relation(self, page_id: str, template_page_id: str) -> bool:
@@ -257,6 +253,42 @@ class NotionClient:
         return self._update_page(page_id, {
             "対応ステータス": {"select": {"name": "再警告済み"}},
         })
+
+    def mark_closed(self, page_id: str, responder_name: str = "") -> bool:
+        """対応ステータスを 対応終了 に更新"""
+        props: dict[str, Any] = {
+            "対応ステータス": {"select": {"name": "対応終了"}},
+        }
+        if responder_name:
+            props["再警告対応者"] = {"rich_text": [{"text": {"content": responder_name}}]}
+        return self._update_page(page_id, props)
+
+    def update_admin_notification(
+        self, page_id: str, admin_channel_id: str, admin_message_ts: str,
+    ) -> bool:
+        """管理ch通知のチャンネルIDとメッセージTSを保存"""
+        return self._update_page(page_id, {
+            "通知チャンネルID": {"rich_text": [{"text": {"content": admin_channel_id}}]},
+            "通知メッセージTS": {"rich_text": [{"text": {"content": admin_message_ts}}]},
+        })
+
+    def update_rewarn_info(
+        self,
+        page_id: str,
+        rewarn_sent_at: datetime,
+        template_page_id: str = "",
+        responder_name: str = "",
+    ) -> bool:
+        """再警告情報を一括更新"""
+        props: dict[str, Any] = {
+            "対応ステータス": {"select": {"name": "再警告済み"}},
+            "再警告送信日時": {"date": {"start": rewarn_sent_at.isoformat()}},
+        }
+        if template_page_id:
+            props["再警告テンプレート"] = {"relation": [{"id": template_page_id}]}
+        if responder_name:
+            props["再警告対応者"] = {"rich_text": [{"text": {"content": responder_name}}]}
+        return self._update_page(page_id, props)
 
     @staticmethod
     def parse_slack_link(url: Optional[str]) -> Optional[tuple[str, str, Optional[str]]]:
@@ -294,6 +326,10 @@ class NotionClient:
         article_page_id = article_relation[0]["id"] if article_relation else ""
         team_id_texts = props.get("team_id", {}).get("rich_text", [])
         team_id = team_id_texts[0]["plain_text"] if team_id_texts else None
+        admin_ch_texts = props.get("通知チャンネルID", {}).get("rich_text", [])
+        admin_channel_id = admin_ch_texts[0]["plain_text"] if admin_ch_texts else ""
+        admin_ts_texts = props.get("通知メッセージTS", {}).get("rich_text", [])
+        admin_message_ts = admin_ts_texts[0]["plain_text"] if admin_ts_texts else ""
         return {
             "page_id": page["id"],
             "post_link": post_link,
@@ -304,6 +340,8 @@ class NotionClient:
             "additional_message": additional_message,
             "template_page_id": template_page_id,
             "team_id": team_id,
+            "admin_channel_id": admin_channel_id,
+            "admin_message_ts": admin_message_ts,
         }
 
     @staticmethod
@@ -320,4 +358,61 @@ class NotionClient:
             return elapsed_hours >= hours
         except (ValueError, TypeError) as e:
             logger.warning(f"Failed to parse warning_sent_at '{warning_sent_at}': {e}")
+            return False
+
+    # ---- ヘルスチェック ----
+
+    def write_health_status(
+        self, lambda_name: str, status: str, error_message: str = "",
+    ) -> bool:
+        """ヘルスチェックDBにLambdaの実行状態を記録（上書き方式）
+
+        Lambda名で既存行を検索し、あれば更新、なければ新規作成。
+        """
+        if not self.health_db_id:
+            return False
+
+        now = datetime.now(timezone.utc).isoformat()
+        props: dict[str, Any] = {
+            "Lambda名": {"title": [{"text": {"content": lambda_name}}]},
+            "ステータス": {"select": {"name": status}},
+            "最終実行日時": {"date": {"start": now}},
+        }
+        if error_message:
+            props["エラー内容"] = {
+                "rich_text": [{"text": {"content": error_message[:2000]}}],
+            }
+        else:
+            props["エラー内容"] = {"rich_text": []}
+
+        # 既存行を検索
+        url = f"{_NOTION_API_BASE}/databases/{self.health_db_id}/query"
+        body = {
+            "filter": {
+                "property": "Lambda名",
+                "title": {"equals": lambda_name},
+            }
+        }
+        try:
+            resp = requests.post(url, headers=self.headers, json=body, timeout=10)
+            if resp.ok:
+                results = resp.json().get("results", [])
+                if results:
+                    # 既存行を更新
+                    page_id = results[0]["id"]
+                    update_props = {k: v for k, v in props.items() if k != "Lambda名"}
+                    return self._update_page(page_id, update_props)
+
+            # 新規作成
+            create_url = f"{_NOTION_API_BASE}/pages"
+            payload = {
+                "parent": {"database_id": self.health_db_id},
+                "properties": props,
+            }
+            resp = requests.post(
+                create_url, headers=self.headers, json=payload, timeout=5,
+            )
+            return resp.ok
+        except Exception as e:
+            logger.error("Health status write failed for %s: %s", lambda_name, e)
             return False

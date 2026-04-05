@@ -7,10 +7,40 @@ from slack_sdk.signature import SignatureVerifier
 
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
+from common.health import write_health
 from .services.config import load_config, load_signing_secret
-from .services.actions import parse_action_context, handle_approve_violation, handle_dismiss_violation
+from .services.actions import (
+    parse_action_context,
+    handle_approve_violation,
+    handle_dismiss_violation,
+    handle_rewarn_violation,
+    handle_close_violation,
+)
 
 SERVICE = "app_alert"
+
+_ACTION_HANDLERS = {
+    "approve_violation": lambda ctx, slack, notion, rid, rname, cfg: handle_approve_violation(
+        context=ctx, slack=slack, notion=notion,
+        responder_id=rid, responder_name=rname,
+        notion_api_key=cfg.notion_api_key,
+        notion_template_db_id=cfg.notion_template_db_id,
+    ),
+    "dismiss_violation": lambda ctx, slack, notion, rid, rname, cfg: handle_dismiss_violation(
+        context=ctx, slack=slack, notion=notion,
+        responder_id=rid, responder_name=rname,
+    ),
+    "rewarn_violation": lambda ctx, slack, notion, rid, rname, cfg: handle_rewarn_violation(
+        context=ctx, slack=slack, notion=notion,
+        responder_id=rid, responder_name=rname,
+        notion_api_key=cfg.notion_api_key,
+        notion_template_db_id=cfg.notion_template_db_id,
+    ),
+    "close_violation": lambda ctx, slack, notion, rid, rname, cfg: handle_close_violation(
+        context=ctx, slack=slack, notion=notion,
+        responder_id=rid, responder_name=rname,
+    ),
+}
 
 def lambda_handler(event: dict, context: Any) -> dict:
     context = build_context(event, context, service=SERVICE)
@@ -27,7 +57,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         if not verifier.is_valid_request(raw_body, headers):
             log_info(context, action="verify_signature", result="fail", detail="invalid signature")
             return {"statusCode": 401, "body": "invalid signature"}
-        
+
         try:
             if "payload=" in raw_body:
                 decoded = parse_qs(raw_body)
@@ -38,13 +68,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
         except Exception as e:
             log_error(context, action="parse_payload", error=e)
             return {"statusCode": 400, "body": "Bad Request"}
-        
+
         team_id = (payload.get("team", {}).get("id")) or context.slack_team_id
         if not team_id:
             log_info(context, action="missing_team_id", result="fail")
             return {"statusCode": 400, "body": "missing team_id"}
 
-        # 2. コンテキスト解析
         cfg = load_config(team_id)
         action_context = parse_action_context(payload)
 
@@ -60,50 +89,30 @@ def lambda_handler(event: dict, context: Any) -> dict:
             log_info(context, action="ignore_action", reason="no_action_id")
             return {"statusCode": 200, "body": "OK"}
 
-        if action_context.action_id not in ("approve_violation", "dismiss_violation"):
+        handler_fn = _ACTION_HANDLERS.get(action_context.action_id)
+        if not handler_fn:
             log_info(context, action="ignore_action", action_id=action_context.action_id)
             return {"statusCode": 200, "body": "OK"}
 
-        # 3. クライアント初期化
         slack = WebClient(token=cfg.slack_bot_token)
         notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
 
-        success = False
-        
         page_id = action_context.value.get("notion_page_id")
+        log_info(context, action=f"exec_{action_context.action_id}", page_id=page_id)
 
-        if action_context.action_id == "approve_violation":
-            log_info(context, action="exec_approve", page_id=page_id)
-
-            success = handle_approve_violation(
-                context=action_context,
-                slack=slack,
-                notion=notion,
-                responder_id=responder_id,
-                responder_name=responder_name,
-                notion_api_key=cfg.notion_api_key,
-                notion_template_db_id=cfg.notion_template_db_id,
-            )
-
-        elif action_context.action_id == "dismiss_violation":
-            log_info(context, action="exec_dismiss", page_id=page_id)
-
-            success = handle_dismiss_violation(
-                context=action_context,
-                slack=slack,
-                notion=notion,
-                responder_id=responder_id,
-                responder_name=responder_name,
-            )
+        success = handler_fn(action_context, slack, notion, responder_id, responder_name, cfg)
 
         if success:
             emit_metric(context, "ActionSuccess", 1)
+            write_health(SERVICE, "正常", notion_api_key=cfg.notion_api_key)
             return {"statusCode": 200, "body": "OK"}
 
         emit_metric(context, "ActionFailure", 1)
+        write_health(SERVICE, "エラー", "Action failed", notion_api_key=cfg.notion_api_key)
         return {"statusCode": 200, "body": "Action Failed"}
 
     except Exception as e:
         log_error(context, action="handler_failed", error=e)
         emit_metric(context, "AlertActionError", 1)
+        write_health(SERVICE, "エラー", str(e))
         return {"statusCode": 200, "body": "error_handled"}

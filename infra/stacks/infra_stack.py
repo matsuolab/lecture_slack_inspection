@@ -124,6 +124,14 @@ class InfraStack(Stack):
             description="Notion Database ID for warning/reminder templates.",
         )
 
+        notion_health_db_id = CfnParameter(
+            self,
+            "NotionHealthDbId",
+            type="String",
+            default="",
+            description="Notion Database ID for Lambda health check status.",
+        )
+
         reminder_hours_threshold = CfnParameter(
             self,
             "ReminderHoursThreshold",
@@ -168,6 +176,7 @@ class InfraStack(Stack):
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
                 "NOTION_ARTICLES_DB_ID": notion_articles_db_id.value_as_string,
+                "NOTION_HEALTH_DB_ID": notion_health_db_id.value_as_string,
                 "USE_MOCK_OPENAI": "false",
             },
         )
@@ -196,6 +205,7 @@ class InfraStack(Stack):
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
+                "NOTION_HEALTH_DB_ID": notion_health_db_id.value_as_string,
             },
         )
 
@@ -251,6 +261,7 @@ class InfraStack(Stack):
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
+                "NOTION_HEALTH_DB_ID": notion_health_db_id.value_as_string,
                 "REMINDER_HOURS_THRESHOLD": reminder_hours_threshold.value_as_string,
             },
         )
