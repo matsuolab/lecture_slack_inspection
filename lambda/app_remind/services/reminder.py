@@ -22,7 +22,7 @@ TITLE_TRUNCATE_LEN = 50
 
 
 def check_message_exists(slack: WebClient, channel_id: str, message_ts: str) -> bool:
-    """元投稿がまだ存在するか確認"""
+    """元投稿がまだ存在するか確認（tombstone=削除済みも検出）"""
     try:
         resp = slack.conversations_history(
             channel=channel_id,
@@ -32,7 +32,12 @@ def check_message_exists(slack: WebClient, channel_id: str, message_ts: str) -> 
             limit=1,
         )
         messages = resp.get("messages", [])
-        return len(messages) > 0 and messages[0].get("ts") == message_ts
+        if not messages or messages[0].get("ts") != message_ts:
+            return False
+        # スレッド返信があると削除後もtombstoneとして残る
+        if messages[0].get("subtype") == "tombstone":
+            return False
+        return True
     except SlackApiError as e:
         logger.error("Message existence check failed (%s/%s): %s", channel_id, message_ts, e)
         return False
