@@ -230,6 +230,16 @@ class NotionClient:
             "property": "対応ステータス", "select": {"equals": "警告済み"},
         })
 
+    def query_active_violations(self) -> list[dict[str, Any]]:
+        """削除チェック対象: 警告済み・期限超過・再警告済みのレコードを取得"""
+        return self._query({
+            "or": [
+                {"property": "対応ステータス", "select": {"equals": "警告済み"}},
+                {"property": "対応ステータス", "select": {"equals": "期限超過"}},
+                {"property": "対応ステータス", "select": {"equals": "再警告済み"}},
+            ]
+        })
+
     def query_rewarn_unsent(self) -> list[dict[str, Any]]:
         """再警告済みだが再警告送信日時が空のレコードを取得（Notion手動ルート）"""
         return self._query({

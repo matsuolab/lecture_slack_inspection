@@ -173,7 +173,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             origin_channel=ev["channel"],
             origin_ts=ev["ts"],
             reason=result.rationale,
-            article_id=result.article_id,
+            article_id=article_display_name or result.article_id,
         )
 
         # 検出方法に基づいて確信度の表示有無を決定

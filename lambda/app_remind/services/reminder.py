@@ -301,6 +301,61 @@ def process_reminders(
     return stats
 
 
+def process_deletion_check(
+    slack: WebClient,
+    notion: NotionClient,
+    dry_run: bool = False,
+    slack_clients: Optional[dict[str, WebClient]] = None,
+) -> dict[str, int]:
+    """全アクティブレコード（警告済み・期限超過・再警告済み）の削除チェック
+
+    投稿が削除されていたら対応終了に更新し、管理chに通知する。
+    process_remindersの削除チェックは警告済みのみ対象なので、
+    期限超過・再警告済みはこの関数でカバーする。
+    """
+    if slack_clients is None:
+        slack_clients = {}
+
+    stats: dict[str, int] = {
+        "queried": 0,
+        "deleted": 0,
+        "alive": 0,
+        "skipped_no_link": 0,
+        "errors": 0,
+    }
+
+    pages = notion.query_active_violations()
+    stats["queried"] = len(pages)
+    logger.info("Found %d active violations for deletion check", len(pages))
+
+    for page in pages:
+        fields = notion.extract_reminder_fields(page)
+        page_id: str = fields["page_id"]
+        title: str = fields["title"][:TITLE_TRUNCATE_LEN]
+
+        parsed = notion.parse_slack_link(fields["post_link"])
+        if not parsed:
+            stats["skipped_no_link"] += 1
+            continue
+
+        channel_id, message_ts, workspace = parsed
+        client = _resolve_slack_client(
+            workspace, slack_clients, slack, team_id=fields.get("team_id"),
+        )
+
+        if check_message_exists(client, channel_id, message_ts):
+            stats["alive"] += 1
+            continue
+
+        logger.info("[DELETED] Message deleted: %s", title)
+        stats["deleted"] += 1
+        if not dry_run:
+            notion.mark_closed(page_id)
+            _notify_deleted(client, fields)
+
+    return stats
+
+
 def process_rewarn_from_notion(
     slack: WebClient,
     notion: NotionClient,
