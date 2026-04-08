@@ -42,5 +42,4 @@ jobs:
             --parameters NotionDbId="${{ secrets.NOTION_DB_ID }}" \
             --parameters NotionTemplateDbId="${{ secrets.NOTION_TEMPLATE_DB_ID }}" \
             --parameters NotionArticlesDbId="${{ secrets.NOTION_ARTICLES_DB_ID }}" \
-            --parameters NotionHealthDbId="${{ secrets.NOTION_HEALTH_DB_ID }}" \
-            --parameters ReminderHoursThreshold=0
+            --parameters NotionHealthDbId="${{ secrets.NOTION_HEALTH_DB_ID }}"
