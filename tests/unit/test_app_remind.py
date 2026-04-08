@@ -114,7 +114,7 @@ class TestExtractReminderFields:
         page = {
             "id": "p",
             "properties": {
-                "使用テンプレート": {"relation": [{"id": "tmpl-page-123"}]},
+                "初回警告テンプレート": {"relation": [{"id": "tmpl-page-123"}]},
                 "投稿リンク": {"url": None},
                 "警告送信日時": {"date": None},
                 "投稿者": {"rich_text": []},
@@ -128,7 +128,7 @@ class TestExtractReminderFields:
         page = {
             "id": "p",
             "properties": {
-                "使用テンプレート": {"relation": []},
+                "初回警告テンプレート": {"relation": []},
                 "投稿リンク": {"url": None},
                 "警告送信日時": {"date": None},
                 "投稿者": {"rich_text": []},

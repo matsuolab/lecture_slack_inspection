@@ -91,7 +91,10 @@ def get_templates(api_key: str, db_id: str, force_refresh: bool = False) -> dict
         for page in pages:
             parsed = _parse_template(page)
             if parsed:
-                templates[parsed["usage"]] = {"name": parsed["name"], "body": parsed["body"]}
+                usage = parsed["usage"]
+                # 同じ用途で複数テンプレートがある場合、「標準」を含むものを優先
+                if usage not in templates or "標準" in parsed["name"]:
+                    templates[usage] = {"name": parsed["name"], "body": parsed["body"]}
 
         _template_cache = templates
         _cache_loaded_at = now

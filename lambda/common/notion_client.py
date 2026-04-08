@@ -211,14 +211,14 @@ class NotionClient:
         warning_sent_at: datetime = None,
         responder_id: str = None,
     ) -> bool:
-        """ページのステータスを更新する。初回対応者・警告送信日時も任意で記録。"""
+        """ページのステータスを更新する。初回警告対応者・警告送信日時も任意で記録。"""
         props: dict[str, Any] = {
             "対応ステータス": {"select": {"name": status}}
         }
         if warning_sent_at:
             props["警告送信日時"] = {"date": {"start": warning_sent_at.isoformat()}}
         if responder_id:
-            props["初回対応者"] = {"rich_text": [{"text": {"content": responder_id}}]}
+            props["初回警告対応者"] = {"rich_text": [{"text": {"content": responder_id}}]}
 
         return self._update_page(page_id, props)
 
@@ -250,9 +250,9 @@ class NotionClient:
         })
 
     def set_template_relation(self, page_id: str, template_page_id: str) -> bool:
-        """使用テンプレートRelationを設定"""
+        """初回警告テンプレートRelationを設定"""
         return self._update_page(page_id, {
-            "使用テンプレート": {"relation": [{"id": template_page_id}]},
+            "初回警告テンプレート": {"relation": [{"id": template_page_id}]},
         })
 
     def set_article_relation(self, page_id: str, article_page_id: str) -> bool:
@@ -333,7 +333,7 @@ class NotionClient:
         title = title_texts[0]["plain_text"] if title_texts else ""
         additional_texts = props.get("追加メッセージ", {}).get("rich_text", [])
         additional_message = additional_texts[0]["plain_text"] if additional_texts else ""
-        relation_items = props.get("使用テンプレート", {}).get("relation", [])
+        relation_items = props.get("初回警告テンプレート", {}).get("relation", [])
         template_page_id = relation_items[0]["id"] if relation_items else ""
         article_relation = props.get("対象条文", {}).get("relation", [])
         article_page_id = article_relation[0]["id"] if article_relation else ""
