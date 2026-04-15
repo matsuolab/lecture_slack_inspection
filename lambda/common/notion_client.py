@@ -240,15 +240,6 @@ class NotionClient:
             ]
         })
 
-    def query_rewarn_unsent(self) -> list[dict[str, Any]]:
-        """再警告済みだが再警告送信日時が空のレコードを取得（Notion手動ルート）"""
-        return self._query({
-            "and": [
-                {"property": "対応ステータス", "select": {"equals": "再警告済み"}},
-                {"property": "再警告送信日時", "date": {"is_empty": True}},
-            ]
-        })
-
     def set_template_relation(self, page_id: str, template_page_id: str) -> bool:
         """初回警告テンプレートRelationを設定"""
         return self._update_page(page_id, {
