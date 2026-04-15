@@ -163,7 +163,7 @@ class InfraStack(Stack):
             "LambdaA_AppInspect",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_alert", "app_oauth"],
+                exclude=["app_alert", "app_oauth", "app_remind", "app_batch"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -194,7 +194,7 @@ class InfraStack(Stack):
             "LambdaB_AppAlert",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect", "app_oauth"],
+                exclude=["app_inspect", "app_oauth", "app_remind", "app_batch"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -222,7 +222,7 @@ class InfraStack(Stack):
             "LambdaC_SlackOAuth",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect", "app_alert"],
+                exclude=["app_inspect", "app_alert", "app_remind", "app_batch"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -250,7 +250,7 @@ class InfraStack(Stack):
             "LambdaD_AppRemind",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect", "app_alert", "app_oauth"],
+                exclude=["app_inspect", "app_alert", "app_oauth", "app_batch"],
             ),
             timeout=Duration.seconds(60),
             memory_size=512,
@@ -290,7 +290,7 @@ class InfraStack(Stack):
             "LambdaE_AppBatch",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_alert", "app_oauth"],
+                exclude=["app_alert", "app_oauth", "app_remind"],
             ),
             timeout=Duration.seconds(900),
             memory_size=1024,
