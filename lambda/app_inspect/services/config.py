@@ -13,6 +13,8 @@ class InspectConfig:
 
     notion_api_key: str
     notion_db_id: str
+    notion_template_db_id: str
+    notion_articles_db_id: str
 
     guidelines_text: str
     min_severity_to_alert: str
@@ -40,8 +42,6 @@ def load_config(team_id: str) -> InspectConfig:
             raise RuntimeError(f"Missing env var: {name}")
         return v
 
-    
-    
     prefix = _get_env("SLACK_INSTALLATION_PARAM_PREFIX", default="/slack/installation").rstrip("/")
     slack_bot_token = get_parameter_by_name(f"{prefix}/{team_id}/bot_token")
     alert_channel_id = get_parameter_by_name(f"{prefix}/{team_id}/alert_channel_id")
@@ -59,7 +59,9 @@ def load_config(team_id: str) -> InspectConfig:
         notion_api_key=get_secret("NOTION_API_KEY_PARAM_NAME"),
         alert_private_channel_id=alert_channel_id,
         notion_db_id=_get_env("NOTION_DB_ID"),
-        
+        notion_template_db_id=_get_env("NOTION_TEMPLATE_DB_ID"),
+        notion_articles_db_id=_get_env("NOTION_ARTICLES_DB_ID"),
+
         openai_model=_get_env("OPENAI_MODEL", default="gpt-4o-mini"),
         guidelines_text=_get_env("GUIDELINES_TEXT", default=""),
         min_severity_to_alert=_get_env("MIN_SEVERITY_TO_ALERT", default="low"),

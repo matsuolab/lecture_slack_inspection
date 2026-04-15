@@ -55,7 +55,7 @@ def test_lambdaB_handles_fixture_interactivity_dismiss_updates_notion_and_no_rep
     mock_notion.update_status.assert_called_once()
     call_args = mock_notion.update_status.call_args
     assert call_args.args[0] == value["notion_page_id"]
-    assert call_args.args[1] == "Dismissed"
+    assert call_args.args[1] == "対応不要"
 
     # 3) 管理者側メッセージ更新するなら（実装している場合だけ）
     # mock_slack.chat_update.assert_called_once()

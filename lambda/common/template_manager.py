@@ -22,8 +22,8 @@ FALLBACK_TEMPLATES: dict[str, str] = {
         "投稿の削除または修正をお願いします。\n"
         "ご不明点がありましたら管理者までお問い合わせください。"
     ),
-    "リマインド": (
-        ":bell: *削除リマインド*\n\n"
+    "再警告": (
+        ":bell: *再警告*\n\n"
         "この投稿はコミュニティガイドラインに抵触する可能性があるため、"
         "削除のお願いをしておりました。\n\n"
         "まだ投稿が残っているようですので、ご確認・削除をお願いいたします。\n"
@@ -72,7 +72,7 @@ def get_templates(api_key: str, db_id: str, force_refresh: bool = False) -> dict
     """テンプレートを取得（キャッシュ付き）
 
     Returns:
-        {"警告": {"name": "標準警告", "body": "..."}, "リマインド": {"name": "...", "body": "..."}}
+        {"警告": {"name": "標準警告", "body": "..."}, "再警告": {"name": "...", "body": "..."}}
     """
     global _template_cache, _cache_loaded_at
 
@@ -91,7 +91,10 @@ def get_templates(api_key: str, db_id: str, force_refresh: bool = False) -> dict
         for page in pages:
             parsed = _parse_template(page)
             if parsed:
-                templates[parsed["usage"]] = {"name": parsed["name"], "body": parsed["body"]}
+                usage = parsed["usage"]
+                # 同じ用途で複数テンプレートがある場合、「標準」を含むものを優先
+                if usage not in templates or "標準" in parsed["name"]:
+                    templates[usage] = {"name": parsed["name"], "body": parsed["body"]}
 
         _template_cache = templates
         _cache_loaded_at = now

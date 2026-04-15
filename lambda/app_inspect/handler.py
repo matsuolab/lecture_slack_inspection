@@ -5,9 +5,10 @@ from slack_sdk import WebClient
 from slack_sdk.signature import SignatureVerifier
 from openai import OpenAI
 
-# commonモジュールのインポート
 from common.observability import build_context, log_info, log_error, emit_metric, Timer
 from common.notion_client import NotionClient
+from common.template_manager import get_template_options
+from common.health import write_health
 from .services.config import load_config, load_signing_secret
 from .services.moderation import run_moderation
 from .components.slack_builder import encode_alert_button_value
@@ -23,19 +24,17 @@ def _decode_body(event: dict) -> str:
     return body
 
 def lambda_handler(event: dict, context: Any) -> dict:
-    # 1. コンテキスト初期化（この時点でSlackのIDなどが自動抽出される）
     context = build_context(event, context, service=SERVICE)
     total_timer = Timer()
     log_info(context, action="request_received")
 
     try:
-        # 1.5 Slackリトライ検出（3秒タイムアウト時の再送を即返却）
+        # Slackリトライ検出（3秒タイムアウト時の再送を即返却）
         raw_headers = event.get("headers") or {}
         lower_headers = {k.lower(): v for k, v in raw_headers.items()}
         if lower_headers.get("x-slack-retry-num"):
             log_info(context, action="retry_skip", retry_num=lower_headers["x-slack-retry-num"])
             return {"statusCode": 200, "body": "ok"}
-
 
         body = _decode_body(event)
         headers = event.get("headers") or {}
@@ -59,7 +58,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         if not team_id:
             log_info(context, action="missing_team_id", result="fail")
             return {"statusCode": 400, "body": "missing team_id"}
-        
+
         cfg = load_config(team_id)
         ev = body_json.get("event", {})
         if body_json.get("type") != "event_callback" or ev.get("type") != "message" or ev.get("bot_id") or ev.get("subtype"):
@@ -69,7 +68,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         if not text:
             return {"statusCode": 200, "body": "empty_text"}
 
-        # 6. モデレーション実行
+        # モデレーション実行
         log_info(context, action="start_moderation", text_length=len(text))
         inference_timer = Timer()
 
@@ -82,7 +81,8 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 rationale="[MOCK] 違反ワード検知",
                 recommended_reply="[MOCK] 削除を推奨します",
                 confidence=0.9,
-                article_id="mock_article_123"
+                article_id="mock_article_123",
+                method="Mock",
             )
         else:
             openai_client = OpenAI(api_key=cfg.openai_api_key)
@@ -94,8 +94,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
             log_info(context, action="judge", result="not_violation")
             return {"statusCode": 200, "body": "ok"}
 
-        # 7. 外部連携
-        # UIで使う値は try の外で初期化しておく（UI構築時の未定義事故を避ける）
+        # 外部連携（Slack名前解決 + Notion記録 + アラート送信）
         slack_client = WebClient(token=cfg.slack_bot_token)
 
         raw_user_id = ev.get("user", "")
@@ -107,9 +106,10 @@ def lambda_handler(event: dict, context: Any) -> dict:
         workspace_name = raw_team_id
         post_link = None
         notion_page_id = None
+        article_display_name = result.article_id
 
         try:
-            notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
+            notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id, cfg.notion_articles_db_id)
 
             # Slack APIで名前を解決する
             try:
@@ -143,7 +143,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 channel=channel_name,
                 workspace=workspace_name,
                 result="Violation",
-                method="OpenAI",
+                method=getattr(result, "method", None) or "LLM",
                 reason=result.rationale,
                 severity=result.severity,
                 categories=result.categories,
@@ -151,8 +151,16 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 article_id=result.article_id,
                 confidence=result.confidence,
                 message_ts=ev["ts"],
+                team_id=team_id,
             )
             log_info(context, action="notion_page_created", page_id=notion_page_id)
+
+            # 条文マスタから正式名称を解決し、Notion relationも設定
+            article_page_id = notion.find_article_page_id(result.article_id) if result.article_id else None
+            if article_page_id:
+                if notion_page_id:
+                    notion.set_article_relation(notion_page_id, article_page_id)
+                article_display_name = notion.get_article_name(article_page_id) or article_display_name
 
         except Exception as e:
             log_error(context, action="external_service_call", error=e)
@@ -165,17 +173,26 @@ def lambda_handler(event: dict, context: Any) -> dict:
             origin_channel=ev["channel"],
             origin_ts=ev["ts"],
             reason=result.rationale,
-            article_id=result.article_id,
+            article_id=article_display_name or result.article_id,
         )
 
-        # UI定義（slack_ui.py）に委譲
-        # result.method に基づいて確信度の表示有無を決定す
+        # 検出方法に基づいて確信度の表示有無を決定
         if cfg.use_mock_openai:
             detection_method = "Mock"
             confidence_for_ui = None
         else:
             detection_method = getattr(result, "method", None) or "LLM"
             confidence_for_ui = result.confidence if detection_method == "LLM" else None
+
+        # テンプレートDBからプルダウン選択肢を動的生成
+        template_options = None
+        if cfg.notion_template_db_id:
+            try:
+                raw_options = get_template_options(cfg.notion_api_key, cfg.notion_template_db_id)
+                if raw_options:
+                    template_options = [(o["name"], o["page_id"]) for o in raw_options if o.get("usage") == "警告"]
+            except Exception as e:
+                log_error(context, action="fetch_template_options", error=e)
 
         blocks = build_violation_alert_blocks(
             author_user_id=(raw_user_id or None),
@@ -187,23 +204,37 @@ def lambda_handler(event: dict, context: Any) -> dict:
             detection_method=detection_method,
             confidence=confidence_for_ui,
             rationale=result.rationale,
-            guideline_article=result.article_id,
+            guideline_article=article_display_name,
             categories=result.categories,
             button_value=button_value,
+            warning_template_options=template_options,
         )
 
-        slack_client.chat_postMessage(
+        alert_resp = slack_client.chat_postMessage(
             channel=cfg.alert_private_channel_id,
             text="【違反検知アラート】",
             blocks=blocks
         )
 
+        # 管理ch通知のts・チャンネルIDをNotionに保存（48h通知のスレッド返信に使用）
+        if notion_page_id and alert_resp.get("ok"):
+            try:
+                notion.update_admin_notification(
+                    notion_page_id,
+                    admin_channel_id=cfg.alert_private_channel_id,
+                    admin_message_ts=alert_resp["ts"],
+                )
+            except Exception as e:
+                log_error(context, action="save_admin_notification", error=e)
+
         log_info(context, action="alert_sent", result="success", page_id=notion_page_id)
         emit_metric(context, "TotalLatencyMs", total_timer.ms(), unit="Milliseconds")
 
+        write_health(SERVICE, "正常", notion_api_key=cfg.notion_api_key)
         return {"statusCode": 200, "body": "ok"}
 
     except Exception as e:
         log_error(context, action="handler_process", error=e)
         emit_metric(context, "handler_error", 1)
+        write_health(SERVICE, "エラー", str(e))
         return {"statusCode": 200, "body": "error_handled"}

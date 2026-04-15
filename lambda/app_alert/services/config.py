@@ -11,7 +11,7 @@ class AlertConfig:
 
     # Env Vars
     notion_db_id: str
-    reply_prefix: str
+    notion_template_db_id: str
 
 def load_signing_secret() -> str:
     return get_secret("SLACK_SIGNING_SECRET_PARAM_NAME")
@@ -29,10 +29,7 @@ def load_config(team_id: str) -> AlertConfig:
         slack_bot_token=slack_bot_token,
         slack_signing_secret=load_signing_secret(),
         notion_api_key=get_secret("NOTION_API_KEY_PARAM_NAME"),
-        
+
         notion_db_id=_get_env("NOTION_DB_ID"),
-        reply_prefix=_get_env(
-            "REPLY_PREFIX",
-            default="この投稿はコミュニティガイドラインに抵触する可能性があります。内容をご確認の上、削除または修正をお願いします。",
-        ),
+        notion_template_db_id=_get_env("NOTION_TEMPLATE_DB_ID"),
     )

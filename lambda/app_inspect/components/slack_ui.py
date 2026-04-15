@@ -7,11 +7,9 @@ WARNING_TEMPLATE_ACTION_ID = "warning_template_select"
 APPROVE_ACTION_ID = "approve_violation"
 DISMISS_ACTION_ID = "dismiss_violation"
 
-# プルダウン選択肢
+# テンプレートDBから取得できない場合のフォールバック選択肢
 DEFAULT_WARNING_TEMPLATE_OPTIONS: list[tuple[str, str]] = [
-    ("選択肢1", "option1"),
-    ("選択肢2", "option2"),
-    ("選択肢3", "option3"),
+    ("デフォルト警告文", ""),
 ]
 
 
@@ -144,7 +142,7 @@ def build_violation_alert_blocks(
 
     reason_lines = [f"• *検出方法*: {method_part}"]
     if conf_part is not None:
-        reason_lines.append(f"• *確信度*: {conf_part}")
+        reason_lines.append(f"• *信頼度*: {conf_part}")
     reason_lines.append(f"• *判定理由*: {safe_rationale}")
 
     blocks.append(
@@ -155,7 +153,7 @@ def build_violation_alert_blocks(
         {
             "type": "context",
             "elements": [
-                {"type": "mrkdwn", "text": f"*該当条文*: {article_part}    |    *カテゴリ*: {category_part}"}
+                {"type": "mrkdwn", "text": f"*対象条文*: {article_part}    |    *カテゴリ*: {category_part}"}
             ],
         }
     )
@@ -183,14 +181,14 @@ def build_violation_alert_blocks(
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "削除勧告を送る"},
+                    "text": {"type": "plain_text", "text": "警告を送る"},
                     "style": "danger",
                     "action_id": APPROVE_ACTION_ID,
                     "value": button_value,
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "Dismiss（対応不要）"},
+                    "text": {"type": "plain_text", "text": "対応不要"},
                     "action_id": DISMISS_ACTION_ID,
                     "value": button_value,
                 },

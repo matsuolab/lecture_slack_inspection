@@ -37,8 +37,11 @@ def test_lambdaA_emits_contract_compliant_button_value(
     # Slack/Notionの戻り値
     mock_slack = mock_external_services["slack"]
     mock_slack.chat_getPermalink.return_value = {"permalink": "http://slack.com/p1"}
+    mock_slack.chat_postMessage.return_value = {"ok": True, "ts": "1700000001.00001"}
     mock_notion = mock_external_services["notion"]
     mock_notion.create_violation_log.return_value = "page-id-123"
+    mock_notion.find_article_page_id.return_value = "article-page-1"
+    mock_notion.get_article_name.return_value = "テスト条文 第1条"
 
     # contracts/fixtures の Event API 入力をそのまま使う
     event = load_contract_fixture("event_api_message.json")
@@ -76,4 +79,4 @@ def test_lambdaA_emits_contract_compliant_button_value(
     assert value["origin_channel"] == ev["channel"]
     assert value["origin_ts"] == ev["ts"]
     assert value["trace_id"] == f"slack:{body['event_id']}"
-    assert value.get("article_id") == "A-123"
+    assert value.get("article_id") == "テスト条文 第1条"

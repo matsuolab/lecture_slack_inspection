@@ -36,7 +36,10 @@ def test_A_to_B_flow_dismiss_updates_notion(
     mocker.patch("app_inspect.handler.run_moderation", return_value=mock_result)
 
     mock_slack.chat_getPermalink.return_value = {"permalink": "http://slack.com/p1"}
+    mock_slack.chat_postMessage.return_value = {"ok": True, "ts": "1700000001.00001"}
     mock_notion.create_violation_log.return_value = "page-id-123"
+    mock_notion.find_article_page_id.return_value = "article-page-1"
+    mock_notion.get_article_name.return_value = "テスト条文 第1条"
 
     eventA = load_contract_fixture("event_api_message.json")
     eventA.setdefault("headers", {})
@@ -82,4 +85,4 @@ def test_A_to_B_flow_dismiss_updates_notion(
     mock_notion.update_status.assert_called_once()
     call_args = mock_notion.update_status.call_args
     assert call_args.args[0] == value_from_A["notion_page_id"]
-    assert call_args.args[1] == "Dismissed"
+    assert call_args.args[1] == "対応不要"

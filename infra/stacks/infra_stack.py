@@ -93,18 +93,19 @@ class InfraStack(Stack):
             description="SSM Parameter name for Notion API Key (SecureString).",
         )
 
-        # alert_private_channel_id = CfnParameter(
-        #     self,
-        #     "AlertPrivateChannelId",
-        #     type="String",
-        #     description="Slack private channel ID to post violation alerts (e.g., C0123...).",
-        # )
-
         notion_db_id = CfnParameter(
             self,
             "NotionDbId",
             type="String",
             description="Notion Database ID to store violation logs.",
+        )
+
+        notion_articles_db_id = CfnParameter(
+            self,
+            "NotionArticlesDbId",
+            type="String",
+            default="",
+            description="Notion Database ID for articles master.",
         )
 
         slack_bot_token_param_name = CfnParameter(
@@ -121,6 +122,14 @@ class InfraStack(Stack):
             type="String",
             default="",
             description="Notion Database ID for warning/reminder templates.",
+        )
+
+        notion_health_db_id = CfnParameter(
+            self,
+            "NotionHealthDbId",
+            type="String",
+            default="",
+            description="Notion Database ID for Lambda health check status.",
         )
 
         reminder_hours_threshold = CfnParameter(
@@ -165,7 +174,9 @@ class InfraStack(Stack):
                 "OPENAI_API_KEY_PARAM_NAME": openai_api_key_param_name.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
-                # TODO: 結合テスト時には無効化
+                "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
+                "NOTION_ARTICLES_DB_ID": notion_articles_db_id.value_as_string,
+                "NOTION_HEALTH_DB_ID": notion_health_db_id.value_as_string,
                 "USE_MOCK_OPENAI": "false",
             },
         )
@@ -193,6 +204,8 @@ class InfraStack(Stack):
                 "SLACK_SIGNING_SECRET_PARAM_NAME": slack_signing_secret_param_name.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
+                "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
+                "NOTION_HEALTH_DB_ID": notion_health_db_id.value_as_string,
             },
         )
 
@@ -244,9 +257,11 @@ class InfraStack(Stack):
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
                 "SLACK_BOT_TOKEN_PARAM_NAME": slack_bot_token_param_name.value_as_string,
+                "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
+                "NOTION_HEALTH_DB_ID": notion_health_db_id.value_as_string,
                 "REMINDER_HOURS_THRESHOLD": reminder_hours_threshold.value_as_string,
             },
         )
@@ -270,7 +285,6 @@ class InfraStack(Stack):
         # -----------------------------
         # 7. IAM権限付与 (SSM Parameter Store)
         # -----------------------------
-        # TODO: 最小権限の原則に基づき、必要なパラメータARNのみを許可するように改善
         installation_param_arn = (
             f"arn:aws:ssm:{self.region}:{self.account}:parameter"
             f"{slack_installation_param_prefix.value_as_string}/*"
