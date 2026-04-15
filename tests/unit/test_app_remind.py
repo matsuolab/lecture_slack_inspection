@@ -215,25 +215,21 @@ class TestCheckMessageExists:
 
 class TestResolveSlackClient:
     def test_known_workspace(self):
-        default = MagicMock()
         ws_client = MagicMock()
-        result = _resolve_slack_client("myws", {"myws": ws_client}, default)
+        result = _resolve_slack_client("myws", {"myws": ws_client})
         assert result is ws_client
 
     def test_unknown_workspace(self):
-        default = MagicMock()
-        result = _resolve_slack_client("unknown", {"myws": MagicMock()}, default)
-        assert result is default
+        result = _resolve_slack_client("unknown", {"myws": MagicMock()})
+        assert result is None
 
     def test_none_workspace(self):
-        default = MagicMock()
-        result = _resolve_slack_client(None, {"myws": MagicMock()}, default)
-        assert result is default
+        result = _resolve_slack_client(None, {"myws": MagicMock()})
+        assert result is None
 
     def test_empty_clients(self):
-        default = MagicMock()
-        result = _resolve_slack_client("myws", {}, default)
-        assert result is default
+        result = _resolve_slack_client("myws", {})
+        assert result is None
 
 
 # ---- process_reminders integration ----
@@ -279,7 +275,9 @@ class TestProcessReminders:
         }
         mock_notion = self._setup_notion_mock([self._make_page()])
 
-        stats = process_reminders(slack=mock_slack, notion=mock_notion, hours_threshold=48)
+        stats = process_reminders(
+            notion=mock_notion, hours_threshold=48, slack_clients={"ws": mock_slack},
+        )
 
         assert stats["expired"] == 1
         mock_notion.mark_48h_over.assert_called_once_with("p1")
@@ -290,7 +288,9 @@ class TestProcessReminders:
         mock_slack.conversations_history.return_value = {"messages": []}
         mock_notion = self._setup_notion_mock([self._make_page()])
 
-        stats = process_reminders(slack=mock_slack, notion=mock_notion, hours_threshold=48)
+        stats = process_reminders(
+            notion=mock_notion, hours_threshold=48, slack_clients={"ws": mock_slack},
+        )
 
         assert stats["already_deleted"] == 1
         mock_slack.chat_postMessage.assert_not_called()
@@ -304,24 +304,23 @@ class TestProcessReminders:
         }
         mock_notion = self._setup_notion_mock([self._make_page(warning_sent_at=recent)])
 
-        stats = process_reminders(slack=mock_slack, notion=mock_notion, hours_threshold=48)
+        stats = process_reminders(
+            notion=mock_notion, hours_threshold=48, slack_clients={"ws": mock_slack},
+        )
 
         assert stats["skipped_not_elapsed"] == 1
         mock_slack.chat_postMessage.assert_not_called()
 
     def test_no_records(self):
-        mock_slack = MagicMock()
         mock_notion = MagicMock(spec=NotionClient)
         mock_notion.query_approved_unreminded.return_value = []
 
-        stats = process_reminders(slack=mock_slack, notion=mock_notion)
+        stats = process_reminders(notion=mock_notion)
 
         assert stats["queried"] == 0
-        mock_slack.chat_postMessage.assert_not_called()
 
     def test_workspace_routing(self):
-        """ワークスペース別クライアントは存在確認に使用"""
-        mock_default = MagicMock()
+        """ワークスペース別クライアントで解決される"""
         mock_ws = MagicMock()
         mock_ws.conversations_history.return_value = {
             "messages": [{"ts": "1234567890.123456"}]
@@ -329,7 +328,6 @@ class TestProcessReminders:
         mock_notion = self._setup_notion_mock([self._make_page()])
 
         stats = process_reminders(
-            slack=mock_default,
             notion=mock_notion,
             hours_threshold=48,
             slack_clients={"ws": mock_ws},
@@ -337,8 +335,20 @@ class TestProcessReminders:
 
         assert stats["expired"] == 1
         mock_ws.conversations_history.assert_called_once()
-        mock_default.chat_postMessage.assert_not_called()
         mock_ws.chat_postMessage.assert_not_called()
+
+    def test_no_client_for_workspace_skipped(self):
+        """解決できるSlackクライアントがない → スキップ (skipped_no_client)"""
+        mock_notion = self._setup_notion_mock([self._make_page()])
+
+        stats = process_reminders(
+            notion=mock_notion, hours_threshold=48, slack_clients={},
+        )
+
+        assert stats["skipped_no_client"] == 1
+        assert stats["skipped_no_link"] == 0
+        assert stats["expired"] == 0
+        mock_notion.mark_48h_over.assert_not_called()
 
     def test_dry_run_48h_over(self):
         mock_slack = MagicMock()
@@ -348,7 +358,10 @@ class TestProcessReminders:
         mock_notion = self._setup_notion_mock([self._make_page()])
 
         stats = process_reminders(
-            slack=mock_slack, notion=mock_notion, hours_threshold=48, dry_run=True,
+            notion=mock_notion,
+            hours_threshold=48,
+            dry_run=True,
+            slack_clients={"ws": mock_slack},
         )
 
         assert stats["expired"] == 1
@@ -363,7 +376,9 @@ class TestProcessReminders:
         }
         mock_notion = self._setup_notion_mock([self._make_page(has_warning=False)])
 
-        stats = process_reminders(slack=mock_slack, notion=mock_notion, hours_threshold=48)
+        stats = process_reminders(
+            notion=mock_notion, hours_threshold=48, slack_clients={"ws": mock_slack},
+        )
 
         assert stats["skipped_not_elapsed"] == 1
         assert stats["expired"] == 0

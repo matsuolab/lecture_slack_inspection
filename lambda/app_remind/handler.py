@@ -1,4 +1,4 @@
-"""Lambda D (app_remind): EventBridgeトリガーで警告・48h経過通知・削除検知"""
+"""Lambda D (app_remind): EventBridgeトリガーで 48h経過通知・削除検知"""
 
 import os
 from typing import Any
@@ -38,13 +38,11 @@ def lambda_handler(event: dict, context: Any) -> dict:
     try:
         cfg = load_config()
 
-        slack = WebClient(token=cfg.slack_bot_token)
         workspace_clients = _build_workspace_clients()
 
         notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
 
         stats = process_reminders(
-            slack=slack,
             notion=notion,
             hours_threshold=cfg.hours_threshold,
             slack_clients=workspace_clients,
@@ -53,7 +51,6 @@ def lambda_handler(event: dict, context: Any) -> dict:
         )
 
         deletion_stats = process_deletion_check(
-            slack=slack,
             notion=notion,
             slack_clients=workspace_clients,
         )

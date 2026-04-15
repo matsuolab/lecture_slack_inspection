@@ -59,15 +59,15 @@ def _send_thread_message(slack: WebClient, channel_id: str, message_ts: str, tex
 def _resolve_slack_client(
     workspace: Optional[str],
     slack_clients: dict[str, WebClient],
-    default_client: WebClient,
     team_id: Optional[str] = None,
-) -> WebClient:
+) -> Optional[WebClient]:
     """ワークスペース名またはteam_idからSlackクライアントを解決する
 
     優先順位:
     1. team_id → OAuthで保存されたper-teamトークン (SSM)
     2. workspace名 → 環境変数で設定されたワークスペース別トークン
-    3. デフォルトクライアント
+
+    どちらも解決できなければ None を返す (呼び出し側で skip 判定する)。
     """
     if team_id:
         prefix = os.getenv("SLACK_INSTALLATION_PARAM_PREFIX", "/slack/installation").rstrip("/")
@@ -77,7 +77,9 @@ def _resolve_slack_client(
 
     if workspace and workspace in slack_clients:
         return slack_clients[workspace]
-    return default_client
+
+    logger.warning("[SKIP] No Slack client resolvable (team_id=%s workspace=%s)", team_id, workspace)
+    return None
 
 
 def _build_message(usage: str, fields: dict, notion_api_key: str = "", template_db_id: str = "") -> str:
@@ -178,7 +180,6 @@ def _notify_deleted(slack: WebClient, fields: dict) -> None:
 
 
 def process_reminders(
-    slack: WebClient,
     notion: NotionClient,
     hours_threshold: int = 48,
     dry_run: bool = False,
@@ -193,7 +194,6 @@ def process_reminders(
     - 警告送信日時あり + hours_threshold経過 → 期限超過 + 管理chスレッド返信（ボタン付き）
 
     Args:
-        slack: デフォルトのSlack WebClient
         notion: NotionClient インスタンス
         hours_threshold: 警告後何時間で48h_Overにするか
         dry_run: Trueの場合、実際の送信・更新をしない
@@ -208,6 +208,7 @@ def process_reminders(
         "queried": 0,
         "skipped_not_elapsed": 0,
         "skipped_no_link": 0,
+        "skipped_no_client": 0,
         "already_deleted": 0,
         "expired": 0,
         "errors": 0,
@@ -236,7 +237,10 @@ def process_reminders(
             continue
 
         channel_id, message_ts, workspace = parsed
-        client = _resolve_slack_client(workspace, slack_clients, slack, team_id=fields.get("team_id"))
+        client = _resolve_slack_client(workspace, slack_clients, team_id=fields.get("team_id"))
+        if client is None:
+            stats["skipped_no_client"] += 1
+            continue
 
         if not check_message_exists(client, channel_id, message_ts):
             logger.info("[DELETED] Message already deleted: %s", title)
@@ -282,7 +286,6 @@ def process_reminders(
 
 
 def process_deletion_check(
-    slack: WebClient,
     notion: NotionClient,
     dry_run: bool = False,
     slack_clients: Optional[dict[str, WebClient]] = None,
@@ -301,6 +304,7 @@ def process_deletion_check(
         "deleted": 0,
         "alive": 0,
         "skipped_no_link": 0,
+        "skipped_no_client": 0,
         "errors": 0,
     }
 
@@ -320,8 +324,11 @@ def process_deletion_check(
 
         channel_id, message_ts, workspace = parsed
         client = _resolve_slack_client(
-            workspace, slack_clients, slack, team_id=fields.get("team_id"),
+            workspace, slack_clients, team_id=fields.get("team_id"),
         )
+        if client is None:
+            stats["skipped_no_client"] += 1
+            continue
 
         if check_message_exists(client, channel_id, message_ts):
             stats["alive"] += 1

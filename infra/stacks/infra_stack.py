@@ -108,14 +108,6 @@ class InfraStack(Stack):
             description="Notion Database ID for articles master.",
         )
 
-        slack_bot_token_param_name = CfnParameter(
-            self,
-            "SlackBotTokenParamName",
-            type="String",
-            default="/slack/bot/token",
-            description="SSM Parameter name for Slack Bot Token (SecureString). Used by Lambda D.",
-        )
-
         notion_template_db_id = CfnParameter(
             self,
             "NotionTemplateDbId",
@@ -256,7 +248,6 @@ class InfraStack(Stack):
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
-                "SLACK_BOT_TOKEN_PARAM_NAME": slack_bot_token_param_name.value_as_string,
                 "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
