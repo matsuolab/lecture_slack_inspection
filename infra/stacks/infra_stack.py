@@ -108,14 +108,6 @@ class InfraStack(Stack):
             description="Notion Database ID for articles master.",
         )
 
-        slack_bot_token_param_name = CfnParameter(
-            self,
-            "SlackBotTokenParamName",
-            type="String",
-            default="/slack/bot/token",
-            description="SSM Parameter name for Slack Bot Token (SecureString). Used by Lambda D.",
-        )
-
         notion_template_db_id = CfnParameter(
             self,
             "NotionTemplateDbId",
@@ -163,7 +155,7 @@ class InfraStack(Stack):
             "LambdaA_AppInspect",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_alert", "app_oauth"],
+                exclude=["app_alert", "app_oauth", "app_remind", "app_batch"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -194,7 +186,7 @@ class InfraStack(Stack):
             "LambdaB_AppAlert",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect", "app_oauth"],
+                exclude=["app_inspect", "app_oauth", "app_remind", "app_batch"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -222,7 +214,7 @@ class InfraStack(Stack):
             "LambdaC_SlackOAuth",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect", "app_alert"],
+                exclude=["app_inspect", "app_alert", "app_remind", "app_batch"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -250,13 +242,12 @@ class InfraStack(Stack):
             "LambdaD_AppRemind",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect", "app_alert", "app_oauth"],
+                exclude=["app_inspect", "app_alert", "app_oauth", "app_batch"],
             ),
             timeout=Duration.seconds(60),
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={
-                "SLACK_BOT_TOKEN_PARAM_NAME": slack_bot_token_param_name.value_as_string,
                 "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
@@ -283,6 +274,36 @@ class InfraStack(Stack):
         remind_rule.add_target(targets.LambdaFunction(lambda_d))
 
         # -----------------------------
+        # 6.5 Lambda E: バッチスキャン (app_batch)
+        # -----------------------------
+        lambda_e = _lambda.DockerImageFunction(
+            self,
+            "LambdaE_AppBatch",
+            code=_lambda.DockerImageCode.from_image_asset(
+                directory="../lambda/",
+                exclude=["app_alert", "app_oauth", "app_remind"],
+            ),
+            timeout=Duration.seconds(900),
+            memory_size=1024,
+            log_retention=logs.RetentionDays.ONE_WEEK,
+            environment={
+                "SLACK_INSTALLATION_PARAM_PREFIX": slack_installation_param_prefix.value_as_string,
+                "OPENAI_API_KEY_PARAM_NAME": openai_api_key_param_name.value_as_string,
+                "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
+                "NOTION_DB_ID": notion_db_id.value_as_string,
+                "NOTION_ARTICLES_DB_ID": notion_articles_db_id.value_as_string,
+                "USE_MOCK_OPENAI": "false",
+                "BATCH_MAX_MESSAGES_PER_INVOKE": "2000",
+                "BATCH_SLEEP_MS": "100",
+            },
+        )
+
+        lambda_e.node.default_child.add_property_override(
+            "ImageConfig",
+            {"Command": ["app_batch.handler.lambda_handler"]},
+        )
+
+        # -----------------------------
         # 7. IAM権限付与 (SSM Parameter Store)
         # -----------------------------
         installation_param_arn = (
@@ -303,6 +324,7 @@ class InfraStack(Stack):
         lambda_a.add_to_role_policy(runtime_policy)
         lambda_b.add_to_role_policy(runtime_policy)
         lambda_d.add_to_role_policy(runtime_policy)
+        lambda_e.add_to_role_policy(runtime_policy)
 
         oauth_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter", "ssm:PutParameter"],

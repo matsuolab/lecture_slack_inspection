@@ -1,4 +1,4 @@
-"""Lambda D (app_remind): EventBridgeトリガーで警告・48h経過通知・削除検知"""
+"""Lambda D (app_remind): EventBridgeトリガーで 48h経過通知・削除検知"""
 
 import os
 from typing import Any
@@ -10,7 +10,7 @@ from common.notion_client import NotionClient
 from common.secret_manager import get_secret
 from common.health import write_health
 from .services.config import load_config
-from .services.reminder import process_reminders, process_deletion_check, process_rewarn_from_notion
+from .services.reminder import process_reminders, process_deletion_check
 
 SERVICE = "app_remind"
 
@@ -38,13 +38,11 @@ def lambda_handler(event: dict, context: Any) -> dict:
     try:
         cfg = load_config()
 
-        slack = WebClient(token=cfg.slack_bot_token)
         workspace_clients = _build_workspace_clients()
 
         notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id)
 
         stats = process_reminders(
-            slack=slack,
             notion=notion,
             hours_threshold=cfg.hours_threshold,
             slack_clients=workspace_clients,
@@ -53,22 +51,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
         )
 
         deletion_stats = process_deletion_check(
-            slack=slack,
             notion=notion,
             slack_clients=workspace_clients,
-        )
-
-        rewarn_stats = process_rewarn_from_notion(
-            slack=slack,
-            notion=notion,
-            slack_clients=workspace_clients,
-            notion_api_key=cfg.notion_api_key,
-            template_db_id=cfg.template_db_id,
         )
 
         elapsed_ms = total_timer.ms()
         log_info(ctx, action="completed", stats=stats,
-                 deletion_stats=deletion_stats, rewarn_stats=rewarn_stats,
+                 deletion_stats=deletion_stats,
                  elapsed_ms=round(elapsed_ms, 1))
         emit_metric(ctx, "TotalLatencyMs", elapsed_ms, unit="Milliseconds")
 

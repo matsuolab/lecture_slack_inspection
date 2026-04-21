@@ -6,7 +6,6 @@ from common.secret_manager import get_secret
 @dataclass(frozen=True)
 class RemindConfig:
     # Secrets
-    slack_bot_token: str
     notion_api_key: str
 
     # Env Vars
@@ -20,7 +19,6 @@ def load_config() -> RemindConfig:
         return os.getenv(name, default)
 
     return RemindConfig(
-        slack_bot_token=get_secret("SLACK_BOT_TOKEN_PARAM_NAME"),
         notion_api_key=get_secret("NOTION_API_KEY_PARAM_NAME"),
 
         notion_db_id=_get_env("NOTION_DB_ID"),

@@ -1,8 +1,7 @@
-"""リマインドサービス: Notionポーリングで初回警告送信 + 48h経過通知 + 削除検知"""
+"""リマインドサービス: Notionポーリングで 48h経過通知 + 削除検知"""
 
 import logging
 import os
-from datetime import datetime, timezone
 from typing import Optional
 
 from slack_sdk import WebClient
@@ -57,22 +56,18 @@ def _send_thread_message(slack: WebClient, channel_id: str, message_ts: str, tex
         return False
 
 
-def send_warning(slack: WebClient, channel_id: str, message_ts: str, text: str) -> bool:
-    return _send_thread_message(slack, channel_id, message_ts, text, "warning")
-
-
 def _resolve_slack_client(
     workspace: Optional[str],
     slack_clients: dict[str, WebClient],
-    default_client: WebClient,
     team_id: Optional[str] = None,
-) -> WebClient:
+) -> Optional[WebClient]:
     """ワークスペース名またはteam_idからSlackクライアントを解決する
 
     優先順位:
     1. team_id → OAuthで保存されたper-teamトークン (SSM)
     2. workspace名 → 環境変数で設定されたワークスペース別トークン
-    3. デフォルトクライアント
+
+    どちらも解決できなければ None を返す (呼び出し側で skip 判定する)。
     """
     if team_id:
         prefix = os.getenv("SLACK_INSTALLATION_PARAM_PREFIX", "/slack/installation").rstrip("/")
@@ -82,7 +77,9 @@ def _resolve_slack_client(
 
     if workspace and workspace in slack_clients:
         return slack_clients[workspace]
-    return default_client
+
+    logger.warning("[SKIP] No Slack client resolvable (team_id=%s workspace=%s)", team_id, workspace)
+    return None
 
 
 def _build_message(usage: str, fields: dict, notion_api_key: str = "", template_db_id: str = "") -> str:
@@ -183,7 +180,6 @@ def _notify_deleted(slack: WebClient, fields: dict) -> None:
 
 
 def process_reminders(
-    slack: WebClient,
     notion: NotionClient,
     hours_threshold: int = 48,
     dry_run: bool = False,
@@ -191,15 +187,13 @@ def process_reminders(
     notion_api_key: str = "",
     template_db_id: str = "",
 ) -> dict[str, int]:
-    """Notionポーリングによる警告・48h経過通知・削除検知のメインロジック
+    """Notionポーリングによる 48h経過通知・削除検知のメインロジック
 
     警告済み のレコードを取得し、以下を処理:
     - 投稿削除済み → 対応終了 + 管理ch通知
-    - 警告送信日時が空 → 違反投稿スレッドに初回警告を送信 + 警告送信日時を記録
     - 警告送信日時あり + hours_threshold経過 → 期限超過 + 管理chスレッド返信（ボタン付き）
 
     Args:
-        slack: デフォルトのSlack WebClient
         notion: NotionClient インスタンス
         hours_threshold: 警告後何時間で48h_Overにするか
         dry_run: Trueの場合、実際の送信・更新をしない
@@ -212,9 +206,9 @@ def process_reminders(
 
     stats: dict[str, int] = {
         "queried": 0,
-        "warned": 0,
         "skipped_not_elapsed": 0,
         "skipped_no_link": 0,
+        "skipped_no_client": 0,
         "already_deleted": 0,
         "expired": 0,
         "errors": 0,
@@ -243,7 +237,10 @@ def process_reminders(
             continue
 
         channel_id, message_ts, workspace = parsed
-        client = _resolve_slack_client(workspace, slack_clients, slack, team_id=fields.get("team_id"))
+        client = _resolve_slack_client(workspace, slack_clients, team_id=fields.get("team_id"))
+        if client is None:
+            stats["skipped_no_client"] += 1
+            continue
 
         if not check_message_exists(client, channel_id, message_ts):
             logger.info("[DELETED] Message already deleted: %s", title)
@@ -253,28 +250,10 @@ def process_reminders(
                 _notify_deleted(client, fields)
             continue
 
-        # 警告送信日時が空 → 初回警告を違反投稿スレッドに送信
+        # 警告送信日時が空のレコードはスキップ（Slackボタン未押下 or Notion手動で状態変更された異常系）
         if fields["warning_sent_at"] is None:
-            # Lambda Bとの競合防止: 送信前にNotionを再取得して確認
-            fresh_page = notion.get_page(page_id)
-            if fresh_page:
-                fresh_fields = notion.extract_reminder_fields(fresh_page)
-                if fresh_fields["warning_sent_at"] is not None:
-                    logger.info("[SKIP] Already warned by Lambda B: %s", title)
-                    stats["skipped_not_elapsed"] += 1
-                    continue
-
-            message = _build_message("警告", fields, notion_api_key, template_db_id)
-            if dry_run:
-                logger.info("[DRY RUN] Would send warning: %s -> %s/%s (ws=%s)", title, channel_id, message_ts, workspace)
-            else:
-                if send_warning(client, channel_id, message_ts, message):
-                    logger.info("[WARNED] Warning sent: %s (ws=%s)", title, workspace)
-                    notion.update_status(page_id, "警告済み", warning_sent_at=datetime.now(timezone.utc))
-                else:
-                    stats["errors"] += 1
-                    continue
-            stats["warned"] += 1
+            logger.info("[SKIP] warning_sent_at is empty: %s", title)
+            stats["skipped_not_elapsed"] += 1
             continue
 
         # 警告送信日時あり → 閾値経過チェック → ステータスを 期限超過 に更新 + 管理ch通知
@@ -307,7 +286,6 @@ def process_reminders(
 
 
 def process_deletion_check(
-    slack: WebClient,
     notion: NotionClient,
     dry_run: bool = False,
     slack_clients: Optional[dict[str, WebClient]] = None,
@@ -326,6 +304,7 @@ def process_deletion_check(
         "deleted": 0,
         "alive": 0,
         "skipped_no_link": 0,
+        "skipped_no_client": 0,
         "errors": 0,
     }
 
@@ -345,8 +324,11 @@ def process_deletion_check(
 
         channel_id, message_ts, workspace = parsed
         client = _resolve_slack_client(
-            workspace, slack_clients, slack, team_id=fields.get("team_id"),
+            workspace, slack_clients, team_id=fields.get("team_id"),
         )
+        if client is None:
+            stats["skipped_no_client"] += 1
+            continue
 
         if check_message_exists(client, channel_id, message_ts):
             stats["alive"] += 1
@@ -361,84 +343,3 @@ def process_deletion_check(
     return stats
 
 
-def process_rewarn_from_notion(
-    slack: WebClient,
-    notion: NotionClient,
-    dry_run: bool = False,
-    slack_clients: Optional[dict[str, WebClient]] = None,
-    notion_api_key: str = "",
-    template_db_id: str = "",
-) -> dict[str, int]:
-    """Notion手動ルート: 再警告済み + 再警告送信日時空のレコードを処理
-
-    運営がNotionで対応ステータスを「再警告済み」に変更したレコードを検知し、
-    テンプレート + 追加メッセージを結合してSlackに再警告を送信する。
-    """
-    if slack_clients is None:
-        slack_clients = {}
-
-    stats: dict[str, int] = {
-        "queried": 0,
-        "sent": 0,
-        "skipped_no_link": 0,
-        "already_deleted": 0,
-        "errors": 0,
-    }
-
-    pages = notion.query_rewarn_unsent()
-    stats["queried"] = len(pages)
-    logger.info("Found %d rewarn_unsent records", len(pages))
-
-    for page in pages:
-        fields = notion.extract_reminder_fields(page)
-        page_id: str = fields["page_id"]
-        title: str = fields["title"][:TITLE_TRUNCATE_LEN]
-
-        # 対象条文 Relation から条文名を解決
-        if fields.get("article_page_id"):
-            article_name = notion.get_article_name(fields["article_page_id"])
-            if article_name:
-                fields["article_name"] = article_name
-
-        parsed = notion.parse_slack_link(fields["post_link"])
-        if not parsed:
-            logger.warning("[SKIP] No valid post_link: %s", title)
-            stats["skipped_no_link"] += 1
-            continue
-
-        channel_id, message_ts, workspace = parsed
-        client = _resolve_slack_client(
-            workspace, slack_clients, slack, team_id=fields.get("team_id"),
-        )
-
-        if not check_message_exists(client, channel_id, message_ts):
-            logger.info("[DELETED] Message already deleted: %s", title)
-            stats["already_deleted"] += 1
-            if not dry_run:
-                notion.mark_closed(page_id)
-                _notify_deleted(client, fields)
-            continue
-
-        # 再警告テンプレートRelationがあればそれを使用、なければデフォルト
-        fields["template_page_id"] = fields.get("rewarn_template_page_id", "")
-        message = _build_message("再警告", fields, notion_api_key, template_db_id)
-
-        if dry_run:
-            logger.info(
-                "[DRY RUN] Would send rewarn: %s -> %s/%s (ws=%s)",
-                title, channel_id, message_ts, workspace,
-            )
-            stats["sent"] += 1
-        else:
-            if _send_thread_message(client, channel_id, message_ts, message, "rewarn"):
-                logger.info("[REWARNED] Rewarn sent: %s (ws=%s)", title, workspace)
-                notion.update_rewarn_info(
-                    page_id,
-                    rewarn_sent_at=datetime.now(timezone.utc),
-                    template_page_id=fields.get("rewarn_template_page_id", ""),
-                )
-                stats["sent"] += 1
-            else:
-                stats["errors"] += 1
-
-    return stats
