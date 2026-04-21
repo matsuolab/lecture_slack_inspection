@@ -28,7 +28,7 @@ _DEFAULT_JUDGE_PROMPT = """あなたはSlack投稿のガイドライン違反を
 この投稿が上記の規約条文に違反しているか判定してください。
 
 ## 出力形式（JSON）
-{"is_violation": true/false, "confidence": 0.0-1.0, "article_id": "該当条文のID", "category": "違反カテゴリ", "reason": "判定理由"}
+{"violation_score": 0から100までの整数, "confidence": 0.0-1.0, "article_id": "該当条文のID", "category": "違反カテゴリ", "reason": "判定理由"}
 
 JSONのみを出力してください。
 """
@@ -235,8 +235,12 @@ class ViolationDetector:
             )
             content = (resp.choices[0].message.content or "").strip()
             r = json.loads(content) if content else {}
+            
+            # スコア51以上（規約違反の可能性が高い）を違反と判定
+            score = r.get("violation_score", 0)
+            
             return {
-                "is_violation": r.get("is_violation", False),
+                "is_violation": score >= 51,
                 "confidence": r.get("confidence", 0.5),
                 "article_id": r.get("article_id"),
                 "category": r.get("category"),
