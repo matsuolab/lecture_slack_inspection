@@ -91,6 +91,9 @@ def _extract_admin_thread_info(notion: Any, existing_page: dict[str, Any]) -> tu
     admin_message_ts = _extract_rich_text_prop(existing_page, "通知メッセージTS")
     return admin_channel_id, admin_message_ts
 
+def _is_active_violation_status(status: str) -> bool:
+    return status in _ACTIVE_VIOLATION_STATUSES
+
 
 def _truncate_text(text: str, limit: int = 180) -> str:
     normalized = " ".join((text or "").split())
@@ -232,48 +235,64 @@ def lambda_handler(event: dict, context: Any) -> dict:
                 if existing_page:
                     admin_channel_id, admin_message_ts = _extract_admin_thread_info(notion, existing_page)
                     saved_post_link = _extract_url_prop(existing_page, "投稿リンク")
+                    current_status = _extract_select_name(existing_page, "対応ステータス")
+                    link_line = f"\n投稿リンク: {saved_post_link}" if saved_post_link else ""
 
                     # 2. もともと違反判定で通知済み → 編集後も違反
-                    if result.is_violation and severity_rank(result.severity) >= severity_rank(cfg.min_severity_to_alert):
-                        if admin_channel_id and admin_message_ts:
-                            link_line = f"\n投稿リンク: {saved_post_link}" if saved_post_link else ""
-                            slack_client.chat_postMessage(
-                                channel=admin_channel_id,
-                                thread_ts=admin_message_ts,
-                                text=(
-                                    "投稿が編集されました。"
-                                    f"\n編集前: {_truncate_text(previous_text)}"
-                                    f"\n編集後: {_truncate_text(text)}"
-                                    f"{link_line}"
-                                ),
+                    if result.is_violation:
+                        if severity_rank(result.severity) >= severity_rank(cfg.min_severity_to_alert):
+                            if admin_channel_id and admin_message_ts:
+                                slack_client.chat_postMessage(
+                                    channel=admin_channel_id,
+                                    thread_ts=admin_message_ts,
+                                    text=(
+                                        "投稿が編集されました。"
+                                        f"\n編集前: {_truncate_text(previous_text)}"
+                                        f"\n編集後: {_truncate_text(text)}"
+                                        f"{link_line}"
+                                    ),
+                                )
+                            log_info(context, action="edit_judge", result="still_violation")
+                        else:
+                            # 違反ではあるが通知閾値未満。close はしない
+                            log_info(
+                                context,
+                                action="edit_judge",
+                                result="still_violation_below_threshold",
+                                severity=result.severity,
+                                status=current_status,
                             )
-                        log_info(context, action="edit_judge", result="still_violation")
+
                         emit_metric(context, "TotalLatencyMs", total_timer.ms(), unit="Milliseconds")
                         write_health(SERVICE, "正常", notion_api_key=cfg.notion_api_key)
                         return {"statusCode": 200, "body": "ok"}
 
                     # 3. もともと違反 → 編集で非違反なら、削除と同じ扱いで終了
-                    page_id = existing_page.get("id")
-                    if isinstance(page_id, str) and page_id:
-                        if hasattr(notion, "mark_closed_by_edit"):
-                            notion.mark_closed_by_edit(page_id)
-                        else:
-                            notion.mark_closed(page_id)
+                    if _is_active_violation_status(current_status):
+                        page_id = existing_page.get("id")
+                        if isinstance(page_id, str) and page_id:
+                            if hasattr(notion, "mark_closed_by_edit"):
+                                notion.mark_closed_by_edit(page_id)
+                            else:
+                                notion.mark_closed(page_id)
 
-                    if admin_channel_id and admin_message_ts:
-                        link_line = f"\n投稿リンク: {saved_post_link}" if saved_post_link else ""
-                        slack_client.chat_postMessage(
-                            channel=admin_channel_id,
-                            thread_ts=admin_message_ts,
-                            text=(
-                                "投稿が編集され、違反ではなくなったため対応終了にしました。"
-                                f"\n編集前: {_truncate_text(previous_text)}"
-                                f"\n編集後: {_truncate_text(text)}"
-                                f"{link_line}"
-                            ),
-                        )
+                        if admin_channel_id and admin_message_ts:
+                            slack_client.chat_postMessage(
+                                channel=admin_channel_id,
+                                thread_ts=admin_message_ts,
+                                text=(
+                                    "投稿が編集され、違反ではなくなったため対応終了にしました。"
+                                    f"\n編集前: {_truncate_text(previous_text)}"
+                                    f"\n編集後: {_truncate_text(text)}"
+                                    f"{link_line}"
+                                ),
+                            )
 
-                    log_info(context, action="edit_judge", result="closed_by_edit")
+                        log_info(context, action="edit_judge", result="closed_by_edit", status=current_status)
+                    else:
+                        # すでに対応終了など active でないものは再closeしない
+                        log_info(context, action="edit_judge", result="already_closed_or_inactive", status=current_status)
+
                     emit_metric(context, "TotalLatencyMs", total_timer.ms(), unit="Milliseconds")
                     write_health(SERVICE, "正常", notion_api_key=cfg.notion_api_key)
                     return {"statusCode": 200, "body": "ok"}
