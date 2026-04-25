@@ -246,9 +246,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
                                     channel=admin_channel_id,
                                     thread_ts=admin_message_ts,
                                     text=(
-                                        "投稿が編集されました。"
-                                        f"\n編集前: {_truncate_text(previous_text)}"
-                                        f"\n編集後: {_truncate_text(text)}"
+                                        "📝投稿が編集されました。"
                                         f"{link_line}"
                                     ),
                                 )
@@ -281,9 +279,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
                                 channel=admin_channel_id,
                                 thread_ts=admin_message_ts,
                                 text=(
-                                    "投稿が編集され、違反ではなくなったため対応終了にしました。"
-                                    f"\n編集前: {_truncate_text(previous_text)}"
-                                    f"\n編集後: {_truncate_text(text)}"
+                                    "📝投稿が編集され、違反ではなくなったため対応終了にしました。"
                                     f"{link_line}"
                                 ),
                             )
