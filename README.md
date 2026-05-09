@@ -1,68 +1,138 @@
-## Repository Structure（ディレクトリ構成）
+## ディレクトリ構成
 
-```text
-repo/
-├── contracts/             # API仕様やスキーマ、テスト用データ
-│   ├── specs/             # Markdown形式の仕様書
+```
+lecture_slack_inspection/
+├── .github/               # GitHub Actions ワークフロー
+├── contracts/             # API仕様・スキーマ・テストデータ
+│   ├── specs/             # Markdown仕様書
 │   ├── schemas/           # JSONスキーマ
-│   └── fixtures/          # テスト用フィクスチャ
-├── evals/                 # プロンプト評価（例: promptfoo など）
-│   └── promptfoo/         # promptfoo設定・テストケース（本番プロンプトを直接参照）
-├── infra/                 # AWS CDK (API Gateway / Lambda / IAM / etc.)
-│   ├── stacks/            # CDKスタック定義
-│   └── tests/             # インフラコードのテスト
-├── lambda/                # Lambdaのアプリコード（関数単位）
-│   ├── app_alert/         # 承認ボタン等を受け取り → 元投稿へ勧告通知
-│   │   ├── handler.py     # Lambdaエントリーポイント
-│   │   ├── services/      # 業務ロジック（Slack通知など）
-│   │   └── components/    # 再利用可能なコンポーネント（Slackフォーマットなど）
-│   ├── app_inspect/       # Slack投稿を受け取り検査（OpenAI等）→ Slack返信
-│   │   ├── handler.py     # Lambdaエントリーポイント
-│   │   ├── services/      # 業務ロジック（違反判定など）
-│   │   └── components/    # 再利用可能なコンポーネント（違反フォーマットなど）
-│   └── common/            # 共通モジュール（Notionクライアント等）
-├── prompts/               # 本番用プロンプト置き場（必要に応じて）
-├── tests/                 # アプリケーションコードのテスト
-│   ├── conftest.py        # テスト設定・共通フィクスチャー
-│   ├── unit/              # ユニットテスト（各Lambdaの単体検証）
-│   └── integration/       # 統合テスト（Lambda間の連携・契約検証）
-└── README.md              # プロジェクト概要
+│   └── fixtures/          # テスト用JSONフィクスチャ
+├── evals/                 # プロンプト評価（promptfoo）
+│   └── promptfoo/         # 評価設定・テストケース
+├── infra/                 # AWS CDK インフラ定義
+│   ├── stacks/            # CDKスタック
+│   └── tests/             # インフラテスト
+├── lambda/                # Lambda アプリケーション
+│   ├── app_alert/         # 警告通知（承認ボタン）
+│   ├── app_batch/         # バッチ処理（定期スキャン）
+│   ├── app_inspect/       # 投稿検査（Events API）
+│   ├── app_oauth/         # OAuth認証
+│   ├── app_remind/        # リマインダー通知
+│   ├── common/            # 共通モジュール
+│   └── Dockerfile         # Lambdaコンテナ定義
+├── prompt_engineering/    # プロンプトエンジニアリング
+├── tests/                 # テストコード
+│   ├── conftest.py        # pytest設定
+│   ├── unit/              # ユニットテスト
+│   └── integration/       # 統合テスト
+├── requirements.txt       # 共通依存
+└── README.md              # 本ファイル
 ```
 
-### contracts/
-API仕様やスキーマ、テスト用データを管理するディレクトリです。
-- `specs/`: Markdown形式の仕様書を配置します。
-- `schemas/`: JSONスキーマを配置します。
-- `fixtures/`: テスト用のデータを配置します。
+---
 
-### evals/
-プロンプト評価・改善（promptfoo等）を行うためのディレクトリです。
-- `promptfoo/`: promptfooの設定ファイルとテストケースを配置します。評価には本番プロンプト（`lambda/app_inspect/services/data/prompts/`）を直接参照します。
+## Lambda アプリケーション一覧
 
-### infra/
-AWSインフラ定義（CDK）を置くディレクトリです。
-- `stacks/`: CDKスタック定義（API Gateway / Lambda / IAM 等）を管理します。
-- `tests/`: インフラコードのテストを配置します。
+| Lambda | 役割 | トリガー |
+|--------|------|----------|
+| `app_inspect` | 投稿検査・違反判定 | Slack Events API |
+| `app_alert` | 警告通知（承認ボタン） | Slack Interactive |
+| `app_remind` | リマインダー送信 | スケジュール |
+| `app_batch` | 一括スキャン処理 | スケジュール |
+| `app_oauth` | ワークスペース認証 | Slack OAuth |
 
-### lambda/
-Lambdaで動作するアプリケーションコード（Botの本体）を置くディレクトリです。
-- `app_alert/`: 承認ボタン等を受け取り、元投稿へ勧告通知を行う処理を管理します。
-  - `handler.py`: Lambdaエントリーポイント。
-  - `services/`: 業務ロジック（Slack通知など）を管理します。
-  - `components/`: 再利用可能なコンポーネント（Slackフォーマットなど）を管理します。
-- `app_inspect/`: Slack投稿を受け取り、検査（OpenAI等）を行い、Slackへ返信する処理を管理します。
-  - `handler.py`: Lambdaエントリーポイント。
-  - `services/`: 業務ロジック（違反判定など）を管理します。
-  - `components/`: 再利用可能なコンポーネント（違反フォーマットなど）を管理します。
-- `common/`: Notionクライアントや共通のロジックを管理します。
+---
 
-### prompts/
-本番用プロンプトを配置するディレクトリです。必要に応じて使用します。
+## 詳細ディレクトリ
 
-### tests/
-アプリケーションコードのテストを管理するディレクトリです。
-- `conftest.py`: テスト設定・共通フィクスチャーを記述します。
-- `unit/`: 各Lambdaのユニットテストを配置します。
-- `integration/`: Lambda間の連携・契約検証を行う統合テストを配置します。
+### `contracts/`
+API仕様・スキーマ・テストデータを管理。
 
+| ディレクトリ | 説明 |
+|-------------|------|
+| `specs/` | Markdown仕様書（Block Kit、Lambda入力） |
+| `schemas/` | JSONスキーマ（データ検証） |
+| `fixtures/` | テスト用JSONデータ |
 
+### `evals/`
+プロンプト評価・改善。
+
+- `promptfoo/`: 評価設定とテストケース
+- 評価対象: `lambda/app_inspect/services/data/prompts/`
+
+### `infra/`
+AWSインフラ（CDK）。
+
+- `stacks/`: API Gateway、Lambda、IAM定義
+- `tests/`: CDKユニットテスト
+
+### `lambda/`
+アプリケーションコード（Bot本体）。
+
+#### `app_inspect/` - 投稿検査
+| ファイル | 説明 |
+|----------|------|
+| `handler.py` | Lambdaエントリーポイント |
+| `services/inspection_flow.py` | 検出フロー制御 |
+| `services/violation_detector.py` | 違反検出 |
+| `services/moderation.py` | モデレーション処理 |
+| `services/violation_transition.py` | 状態遷移 |
+| `components/slack_builder.py` | Slackメッセージ構築 |
+| `components/slack_event_parser.py` | イベント解析 |
+
+#### `app_alert/` - 警告通知
+| ファイル | 説明 |
+|----------|------|
+| `handler.py` | Lambdaエントリーポイント |
+| `services/actions.py` | ボタンアクション処理 |
+
+#### `app_remind/` - リマインダー
+| ファイル | 説明 |
+|----------|------|
+| `handler.py` | Lambdaエントリーポイント |
+| `services/reminder.py` | リマインダーロジック |
+
+#### `app_batch/` - バッチ処理
+| ファイル | 説明 |
+|----------|------|
+| `handler.py` | Lambdaエントリーポイント |
+| `services/scanner.py` | スキャンロジック |
+
+#### `app_oauth/` - OAuth認証
+| ファイル | 説明 |
+|----------|------|
+| `handler.py` | Lambdaエントリーポイント |
+
+#### `common/` - 共通モジュール
+| ファイル | 説明 |
+|----------|------|
+| `notion_client.py` | Notion APIクライアント |
+| `slack_utils.py` | Slackユーティリティ |
+| `template_manager.py` | テンプレート管理 |
+| `secret_manager.py` | シークレット管理 |
+| `observability.py` | ログ・メトリクス |
+| `health.py` | ヘルスチェック |
+
+### `tests/`
+テストコード。
+
+| ディレクトリ | 説明 |
+|-------------|------|
+| `conftest.py` | pytest設定・フィクスチャー |
+| `unit/` | ユニットテスト |
+| `integration/` | 連携テスト・契約検証 |
+
+---
+
+### プロンプト更新
+- 本番: `lambda/app_inspect/services/data/prompts/`
+- 評価: `evals/promptfoo/`
+
+### テスト追加
+- ユニット: `tests/unit/test_<app>.py`
+- 統合: `tests/integration/`
+- 契約: `tests/integration/test_a_to_b_flow_contract.py`
+
+### ログ確認
+- `lambda/common/observability.py`で構造化ログ
+- CloudWatch Logsで参照

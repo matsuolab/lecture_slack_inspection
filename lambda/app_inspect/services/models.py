@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 Severity = Literal["low", "medium", "high"]
+InspectEventKind = Literal["new_message", "edited_message"]
 
 
 @dataclass(frozen=True)
@@ -11,18 +12,33 @@ class ModerationResult:
     categories: list[str]
     rationale: str
     recommended_reply: str
-
-    # 追加フィールド
-    confidence: float = 0.0  # 例: モデルの信頼度スコア
-    article_id: str | None = None  # 例: 対象となる記事のID
-
-    # ★追加: 判定手法（例: "NGワード" / "LLM" / "Mock"）
+    confidence: float = 0.0
+    article_id: str | None = None
     method: str | None = None
+
+
+@dataclass(frozen=True)
+class InspectEvent:
+    kind: InspectEventKind
+    team_id: str
+    channel_id: str
+    user_id: str
+    message_ts: str
+    text: str
+    event_ts: str | None = None
+    previous_text: str | None = None
+    editor_user_id: str | None = None
+
+
+@dataclass(frozen=True)
+class SlackIdentity:
+    profile_name: str
+    channel_name: str
+    workspace_name: str
 
 
 def normalize_result(raw: dict) -> ModerationResult:
     is_violation = bool(raw.get("is_violation", False))
-
     severity = str(raw.get("severity", "low")).lower()
     if severity not in ("low", "medium", "high"):
         severity = "low"
@@ -36,7 +52,10 @@ def normalize_result(raw: dict) -> ModerationResult:
 
     recommended_reply = str(raw.get("recommended_reply", "")).strip()[:600]
     if not recommended_reply:
-        recommended_reply = "この投稿はガイドラインに抵触する可能性があります。内容をご確認の上、削除または修正をお願いします。"
+        recommended_reply = (
+            "この投稿はガイドラインに抵触する可能性があります。"
+            "内容をご確認の上、削除または修正をお願いします。"
+        )
 
     method = raw.get("method")
     if method is not None:
@@ -44,7 +63,7 @@ def normalize_result(raw: dict) -> ModerationResult:
 
     return ModerationResult(
         is_violation=is_violation,
-        severity=severity,  # type: ignore
+        severity=severity,  # type: ignore[arg-type]
         categories=categories,
         rationale=rationale,
         recommended_reply=recommended_reply,
