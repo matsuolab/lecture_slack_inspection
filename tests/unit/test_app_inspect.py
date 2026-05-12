@@ -136,3 +136,201 @@ def test_violation_detector_uses_configured_models():
     embed_kwargs = client.embeddings.create.call_args.kwargs
     assert chat_kwargs["model"] == "gpt-4o-mini"
     assert embed_kwargs["model"] == "text-embedding-3-small"
+
+def _build_message_changed_event(
+    *,
+    base_event: dict,
+    before_text: str,
+    after_text: str,
+    message_ts: str = "1700000000.000100",
+    user_id: str = "U123",
+    channel_id: str = "C123",
+) -> dict:
+    event = dict(base_event)
+    body = json.loads(event["body"])
+
+    body["event"] = {
+        "type": "message",
+        "subtype": "message_changed",
+        "hidden": True,
+        "channel": channel_id,
+        "message": {
+            "type": "message",
+            "user": user_id,
+            "text": after_text,
+            "ts": message_ts,
+            "edited": {
+                "user": user_id,
+                "ts": "1700000010.000200",
+            },
+        },
+        "previous_message": {
+            "type": "message",
+            "user": user_id,
+            "text": before_text,
+            "ts": message_ts,
+        },
+        "event_ts": "1700000010.000200",
+    }
+
+    event["body"] = json.dumps(body)
+    event.setdefault("headers", {})
+    event["headers"].update(
+        {
+            "x-slack-signature": "dummy",
+            "x-slack-request-timestamp": "123",
+        }
+    )
+    return event
+
+
+def test_edit_non_violation_to_violation_creates_new_alert(
+    load_contract_fixture,
+    mock_external_services,
+    mock_config,
+    mocker,
+):
+    mock_external_services["signature"].is_valid_request.return_value = True
+
+    mock_result = MagicMock()
+    mock_result.is_violation = True
+    mock_result.severity = "high"
+    mock_result.rationale = "edited spam"
+    mock_result.confidence = 0.95
+    mock_result.article_id = "A-123"
+    mock_result.categories = ["spam"]
+    mock_result.method = "LLM"
+    mocker.patch("app_inspect.handler.run_moderation", return_value=mock_result)
+
+    mock_slack = mock_external_services["slack"]
+    mock_slack.chat_getPermalink.return_value = {"permalink": "http://slack.com/p1"}
+    mock_slack.chat_postMessage.return_value = {"ok": True, "ts": "1700000001.00001"}
+
+    mock_notion = mock_external_services["notion"]
+    mock_notion.find_violation_by_message_ts.return_value = None
+    mock_notion.create_violation_log.return_value = "page-id-123"
+    mock_notion.find_article_page_id.return_value = "article-page-1"
+    mock_notion.get_article_name.return_value = "テスト条文 第1条"
+
+    event = _build_message_changed_event(
+        base_event=load_contract_fixture("event_api_message.json"),
+        before_text="これはセーフです",
+        after_text="これは違反です",
+    )
+
+    resp = lambda_handler(event, {})
+    assert resp["statusCode"] == 200
+
+    mock_notion.create_violation_log.assert_called_once()
+    mock_slack.chat_postMessage.assert_called_once()
+
+    _, kwargs = mock_slack.chat_postMessage.call_args
+    assert kwargs["channel"] == mock_config.alert_private_channel_id
+    assert "thread_ts" not in kwargs
+
+
+def test_edit_existing_violation_to_still_violation_posts_thread_notice(
+    load_contract_fixture,
+    mock_external_services,
+    mock_config,
+    mocker,
+):
+    mock_external_services["signature"].is_valid_request.return_value = True
+
+    mock_result = MagicMock()
+    mock_result.is_violation = True
+    mock_result.severity = "high"
+    mock_result.rationale = "still violation"
+    mock_result.confidence = 0.88
+    mock_result.article_id = "A-123"
+    mock_result.categories = ["spam"]
+    mock_result.method = "LLM"
+    mocker.patch("app_inspect.handler.run_moderation", return_value=mock_result)
+
+    mock_slack = mock_external_services["slack"]
+    mock_notion = mock_external_services["notion"]
+    mock_notion.find_violation_by_message_ts.return_value = {
+        "id": "page-id-123",
+        "properties": {
+            "対応ステータス": {"select": {"name": "警告済み"}},
+            "通知チャンネルID": {"rich_text": [{"plain_text": "C_ADMIN"}]},
+            "通知メッセージTS": {"rich_text": [{"plain_text": "1700009999.000100"}]},
+            "投稿リンク": {"url": "http://slack.com/p1"},
+        },
+    }
+
+    event = _build_message_changed_event(
+        base_event=load_contract_fixture("event_api_message.json"),
+        before_text="前の違反文",
+        after_text="編集後も違反文",
+    )
+
+    resp = lambda_handler(event, {})
+    assert resp["statusCode"] == 200
+
+    mock_notion.create_violation_log.assert_not_called()
+    mock_slack.chat_postMessage.assert_called_once()
+
+    _, kwargs = mock_slack.chat_postMessage.call_args
+    assert kwargs["channel"] == "C_ADMIN"
+    assert kwargs["thread_ts"] == "1700009999.000100"
+    assert "投稿が編集されました" in kwargs["text"]
+
+
+def test_edit_existing_violation_to_clean_closes_violation(
+    load_contract_fixture,
+    mock_external_services,
+    mock_config,
+    mocker,
+):
+    mock_external_services["signature"].is_valid_request.return_value = True
+
+    mock_result = MagicMock()
+    mock_result.is_violation = False
+    mock_result.severity = "low"
+    mock_result.rationale = "clean after edit"
+    mock_result.confidence = 0.20
+    mock_result.article_id = None
+    mock_result.categories = []
+    mock_result.method = "LLM"
+    mocker.patch("app_inspect.handler.run_moderation", return_value=mock_result)
+
+    mock_slack = mock_external_services["slack"]
+    mock_slack.users_info.return_value = {
+        "user": {
+            "profile": {
+                "display_name": "user123",
+                "real_name": "user123",
+            }
+        }
+    }
+    mock_slack.conversations_info.return_value = {"channel": {"name": "general"}}
+    mock_slack.team_info.return_value = {"team": {"name": "workspace"}}
+
+    mock_notion = mock_external_services["notion"]
+    mock_notion.find_violation_by_message_ts.return_value = {
+        "id": "page-id-123",
+        "properties": {
+            "対応ステータス": {"select": {"name": "警告済み"}},
+            "通知チャンネルID": {"rich_text": [{"plain_text": "C_ADMIN"}]},
+            "通知メッセージTS": {"rich_text": [{"plain_text": "1700009999.000100"}]},
+            "投稿リンク": {"url": "http://slack.com/p1"},
+        },
+    }
+
+    event = _build_message_changed_event(
+        base_event=load_contract_fixture("event_api_message.json"),
+        before_text="違反です",
+        after_text="~~違反~~",
+    )
+
+    resp = lambda_handler(event, {})
+    assert resp["statusCode"] == 200
+
+    mock_notion.mark_closed_by_edit.assert_called_once()
+    mock_notion.create_violation_log.assert_not_called()
+
+    _, kwargs = mock_slack.chat_postMessage.call_args
+    assert kwargs["channel"] == "C_ADMIN"
+    assert kwargs["thread_ts"] == "1700009999.000100"
+    assert "対応終了" in kwargs["text"]
