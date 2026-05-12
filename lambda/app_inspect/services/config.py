@@ -10,6 +10,7 @@ class InspectConfig:
 
     openai_api_key: str
     openai_model: str
+    openai_embedding_model: str
 
     notion_api_key: str
     notion_db_id: str
@@ -62,8 +63,9 @@ def load_config(team_id: str) -> InspectConfig:
         notion_template_db_id=_get_env("NOTION_TEMPLATE_DB_ID"),
         notion_articles_db_id=_get_env("NOTION_ARTICLES_DB_ID"),
 
-        openai_model=_get_env("OPENAI_MODEL", default="gpt-4o-mini"),
+        openai_model=_get_env("OPENAI_MODEL"),
+        openai_embedding_model=_get_env("OPENAI_EMBEDDING_MODEL"),
         guidelines_text=_get_env("GUIDELINES_TEXT", default=""),
-        min_severity_to_alert=_get_env("MIN_SEVERITY_TO_ALERT", default="low"),
+        min_severity_to_alert=_get_env("MIN_SEVERITY_TO_ALERT"),
         use_mock_openai=_get_env("USE_MOCK_OPENAI", default="false").lower() == "true",
     )

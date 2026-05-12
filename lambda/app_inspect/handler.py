@@ -86,7 +86,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
             )
         else:
             openai_client = OpenAI(api_key=cfg.openai_api_key)
-            result = run_moderation(openai_client, cfg.openai_model, cfg.guidelines_text, text)
+            result = run_moderation(
+                openai_client,
+                cfg.openai_model,
+                cfg.guidelines_text,
+                text,
+                cfg.openai_embedding_model,
+            )
 
         emit_metric(context, "InferenceLatencyMs", inference_timer.ms(), unit="Milliseconds")
 
