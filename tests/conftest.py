@@ -80,6 +80,7 @@ def mock_config(mocker):
     mock_conf.guidelines_text = "No spam"
     mock_conf.notion_api_key = "secret_notion"
     mock_conf.notion_db_id = "db_id"
+    mock_conf.notion_ws_list_db_id = "ws_list_db_id"
     mock_conf.min_severity_to_alert = "medium"
     mock_conf.use_mock_openai = False
     mock_conf.alert_private_channel_id = "C_ADMIN"

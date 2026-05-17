@@ -1,8 +1,12 @@
-"""違反検出モジュール: RAG関連条文検索 → LLM判定（gpt-4.1-nano）"""
+"""違反検出モジュール: 全条文 → LLM 判定 (gpt-4o-mini)
+
+旧仕様の RAG (関連条文 top_k=3 抽出) と NG ワード即確定経路は廃止済。
+gpt-4o-mini の context が十分広く、条文数も少数 (24+α) なので、
+articles.json + extra_articles (WS ローカルルール) を全部 LLM に渡す方式に統一。
+"""
 import json
-import re
-import math
 import os
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -47,7 +51,7 @@ def _read_text(path: str) -> str:
 
 
 def _get_prompt_template() -> str:
-    """judge prompt を初回だけロード（無ければデフォルト）"""
+    """judge prompt を初回だけロード (無ければデフォルト)"""
     global _PROMPT_TEMPLATE_CACHE
     if _PROMPT_TEMPLATE_CACHE is not None:
         return _PROMPT_TEMPLATE_CACHE
@@ -60,7 +64,7 @@ def _get_prompt_template() -> str:
 
 
 def _get_response_format() -> dict:
-    """response_format を初回だけロード（無ければ json_object）"""
+    """response_format を初回だけロード (無ければ json_object)"""
     global _RESPONSE_FORMAT_CACHE
     if _RESPONSE_FORMAT_CACHE is not None:
         return _RESPONSE_FORMAT_CACHE
@@ -74,7 +78,7 @@ def _get_response_format() -> dict:
 
 
 def _render_template(template: str, **vars: str) -> str:
-    """{{ var }} を最小実装で置換（依存追加なし）"""
+    """{{ var }} を最小実装で置換 (依存追加なし)"""
     out = template
     for k, v in vars.items():
         out = re.sub(r"{{\s*" + re.escape(k) + r"\s*}}", str(v), out)
@@ -89,56 +93,40 @@ class DetectionResult:
     article_id: Optional[str]
     category: Optional[str]
     reason: str
-    step_stopped: int
 
 
 class ViolationDetector:
-    def __init__(self, openai_client, articles_path: str = None, ng_patterns_path: str = None):
+    def __init__(self, openai_client, articles_path: str = None, model: str = "gpt-4o-mini"):
         self.client = openai_client
+        self.model = model
         self.articles = _load_json_list(
             articles_path or os.path.join(_COMMON_DATA_DIR, "articles.json"),
             "articles",
         )
-        self.ng_patterns = _load_json_list(
-            ng_patterns_path or os.path.join(_DATA_DIR, "ng_patterns.json"),
-            "patterns",
-        )
-
         self._article_title_by_id = {a["id"]: a.get("article", a["id"]) for a in self.articles}
-        self._article_id_by_title = {a.get("article"): a["id"] for a in self.articles if a.get("article")}
+        self._article_id_by_title = {
+            a.get("article"): a["id"] for a in self.articles if a.get("article")
+        }
 
-        self._embedding_cache = {}
+    def detect(self, text: str, extra_articles: Optional[list] = None) -> DetectionResult:
+        """articles.json + extra_articles を全部 LLM に渡して判定。
 
-    def detect(self, text: str, course: str = None, skip_llm: bool = False) -> DetectionResult:
-        if skip_llm:
-            ng_match = self._check_ng_patterns(text, course)
-            if ng_match:
-                aid = ng_match["article_id"]
-                title = self._article_title_by_id.get(aid)
-                reason = f"NGパターン検出: {ng_match['pattern'][:50]}"
-                if title:
-                    reason = f"[{aid} {title}] {reason}"
-                return DetectionResult(
-                    is_violation=True,
-                    confidence=1.0,
-                    method="NGワード",
-                    article_id=aid,
-                    category=ng_match["category"],
-                    reason=reason,
-                    step_stopped=1,
-                )
-            return DetectionResult(
-                is_violation=False,
-                confidence=0.0,
-                method="NGワード",
-                article_id=None,
-                category=None,
-                reason="NGワードに該当なし",
-                step_stopped=1,
-            )
+        extra_articles は WS ローカルルール条文。
+        各要素は {id, article, content, [category, regulation]} を持つ想定。
+        """
+        articles = list(self.articles)
+        if extra_articles:
+            articles.extend(extra_articles)
+            # 追加条文の id ↔ article マッピングを動的に拡張 (表示用解決のため)
+            for a in extra_articles:
+                aid = a.get("id")
+                article = a.get("article", aid)
+                if aid:
+                    self._article_title_by_id[aid] = article
+                if article:
+                    self._article_id_by_title[article] = aid
 
-        relevant = self._find_relevant_articles(text, course, top_k=3)
-        result = self._judge_by_llm(text, relevant)
+        result = self._judge_by_llm(text, articles)
 
         aid = self._normalize_article_id(result.get("article_id"))
         title = self._article_title_by_id.get(aid) if aid else None
@@ -153,7 +141,6 @@ class ViolationDetector:
             article_id=aid,
             category=result.get("category"),
             reason=reason,
-            step_stopped=2,
         )
 
     def _normalize_article_id(self, article_id: Optional[str]) -> Optional[str]:
@@ -161,62 +148,16 @@ class ViolationDetector:
             return None
         s = str(article_id).strip()
 
-        # よくある「A-001 ...」形式からID部分だけ抜く（必要ならパターンを調整）
+        # よくある「A-001 ...」形式から ID 部分だけ抜く
         m = re.match(r"^([A-Za-z]+-\d+)", s)
         if m:
             s = m.group(1)
 
-        # titleを返してきた場合はIDに戻す
+        # title を返してきた場合は ID に戻す
         if s not in self._article_title_by_id and s in self._article_id_by_title:
             s = self._article_id_by_title[s]
 
         return s
-
-    def _check_ng_patterns(self, text: str, course: str = None) -> Optional[dict]:
-        for p in self.ng_patterns:
-            courses = p.get("courses", ["ALL"])
-            if course and "ALL" not in courses and course not in courses:
-                continue
-            try:
-                if re.search(p["pattern"], text, re.IGNORECASE):
-                    return {
-                        "pattern": p["pattern"],
-                        "article_id": p["article_id"],
-                        "category": p["category"],
-                    }
-            except re.error:
-                pass
-        return None
-
-    def _find_relevant_articles(self, text: str, course: str = None, top_k: int = 3) -> list:
-        articles = self.articles
-        if course:
-            articles = [
-                a for a in articles
-                if "ALL" in a.get("courses", ["ALL"]) or course in a.get("courses", [])
-            ]
-
-        text_vec = self._get_embedding(text)
-        scored = []
-        for a in articles:
-            content = f"{a['content']} {' '.join(a.get('keywords', []))}"
-            aid = a["id"]
-            if aid not in self._embedding_cache:
-                self._embedding_cache[aid] = self._get_embedding(content)
-            sim = self._cosine_sim(text_vec, self._embedding_cache[aid])
-            scored.append((a, sim))
-
-        scored.sort(key=lambda x: x[1], reverse=True)
-        return [
-            {
-                "id": a["id"],
-                "article": a["article"],
-                "category": a["category"],
-                "content": a["content"],
-                "similarity": round(sim, 3),
-            }
-            for a, sim in scored[:top_k]
-        ]
 
     def _judge_by_llm(self, text: str, articles: list) -> dict:
         articles_text = "\n".join(
@@ -228,17 +169,16 @@ class ViolationDetector:
 
         try:
             resp = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format=_get_response_format(),
                 temperature=0,
             )
             content = (resp.choices[0].message.content or "").strip()
             r = json.loads(content) if content else {}
-            
-            # スコア51以上（規約違反の可能性が高い）を違反と判定
+
             score = r.get("violation_score", 0)
-            
+
             return {
                 "is_violation": score >= 51,
                 "confidence": r.get("confidence", 0.5),
@@ -254,13 +194,3 @@ class ViolationDetector:
                 "category": None,
                 "reason": f"LLM判定エラー: {e}",
             }
-
-    def _get_embedding(self, text: str) -> list:
-        resp = self.client.embeddings.create(model="text-embedding-3-small", input=text)
-        return resp.data[0].embedding
-
-    def _cosine_sim(self, v1: list, v2: list) -> float:
-        dot = sum(a * b for a, b in zip(v1, v2))
-        n1 = math.sqrt(sum(a * a for a in v1))
-        n2 = math.sqrt(sum(b * b for b in v2))
-        return dot / (n1 * n2) if n1 and n2 else 0.0

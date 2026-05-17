@@ -13,16 +13,86 @@ _SLACK_WORKSPACE_PATTERN = re.compile(r"https://([^.]+)\.slack\.com/")
 
 class NotionClient:
     def __init__(self, api_key: str, db_id: str, articles_db_id: str = "",
-                 health_db_id: str = ""):
+                 health_db_id: str = "", ws_list_db_id: str = ""):
         self.api_key = api_key
         self.db_id = db_id
         self.articles_db_id = articles_db_id
         self.health_db_id = health_db_id
+        self.ws_list_db_id = ws_list_db_id
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json"
         }
+
+    def query_workspace_page_id(self, team_id: str) -> Optional[str]:
+        """WS 一覧マスタ DB から team_id (rich_text) で検索、該当ページの page_id を返す。
+        ヒットなし or エラー時は None。"""
+        if not self.ws_list_db_id or not team_id:
+            return None
+        url = f"{_NOTION_API_BASE}/databases/{self.ws_list_db_id}/query"
+        body = {"filter": {"property": "team_id", "rich_text": {"equals": team_id}}}
+        try:
+            resp = requests.post(url, headers=self.headers, json=body, timeout=10)
+            if not resp.ok:
+                logger.error("query_workspace_page_id failed: %s %s", resp.status_code, resp.text[:200])
+                return None
+            results = resp.json().get("results", [])
+            if results:
+                return results[0].get("id")
+            return None
+        except Exception as e:
+            logger.error("query_workspace_page_id exception: %s", e)
+            return None
+
+    def query_workspace_local_rules(self, workspace_page_id: str) -> list[dict]:
+        """条文マスタ DB から該当 WS のローカルルール条文を取得。
+        条件: workspace 列に該当 WS を含む AND 有効=True。
+        Returns: [{id, article, content, category, regulation}, ...]
+        """
+        if not self.articles_db_id or not workspace_page_id:
+            return []
+        url = f"{_NOTION_API_BASE}/databases/{self.articles_db_id}/query"
+        body = {
+            "filter": {
+                "and": [
+                    {"property": "有効", "checkbox": {"equals": True}},
+                    {"property": "workspace", "relation": {"contains": workspace_page_id}},
+                ]
+            }
+        }
+        try:
+            resp = requests.post(url, headers=self.headers, json=body, timeout=10)
+            if not resp.ok:
+                logger.error("query_workspace_local_rules failed: %s %s",
+                             resp.status_code, resp.text[:200])
+                return []
+            pages = resp.json().get("results", [])
+            rules: list[dict] = []
+            for page in pages:
+                props = page.get("properties", {})
+                title_parts = props.get("条文ID", {}).get("title", [])
+                article_id = title_parts[0]["plain_text"] if title_parts else ""
+                article_parts = props.get("条項番号", {}).get("rich_text", [])
+                article = "".join(p.get("plain_text", "") for p in article_parts) or article_id
+                content_parts = props.get("内容", {}).get("rich_text", [])
+                content = "".join(p.get("plain_text", "") for p in content_parts)
+                category_obj = props.get("カテゴリ", {}).get("select")
+                category = category_obj["name"] if category_obj else ""
+                regulation_obj = props.get("規約", {}).get("select")
+                regulation = regulation_obj["name"] if regulation_obj else ""
+                if article_id and content:
+                    rules.append({
+                        "id": article_id,
+                        "article": article,
+                        "content": content,
+                        "category": category,
+                        "regulation": regulation,
+                    })
+            return rules
+        except Exception as e:
+            logger.error("query_workspace_local_rules exception: %s", e)
+            return []
 
     def _query(self, filter_obj: dict = None) -> list:
         """Notion DBクエリ（ページネーション対応）"""

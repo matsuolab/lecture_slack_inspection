@@ -124,6 +124,14 @@ class InfraStack(Stack):
             description="Notion Database ID for Lambda health check status.",
         )
 
+        notion_ws_list_db_id = CfnParameter(
+            self,
+            "NotionWsListDbId",
+            type="String",
+            default="",
+            description="Notion Database ID for WS list master (team_id <-> workspace mapping).",
+        )
+
         reminder_hours_threshold = CfnParameter(
             self,
             "ReminderHoursThreshold",
@@ -169,6 +177,7 @@ class InfraStack(Stack):
                 "NOTION_TEMPLATE_DB_ID": notion_template_db_id.value_as_string,
                 "NOTION_ARTICLES_DB_ID": notion_articles_db_id.value_as_string,
                 "NOTION_HEALTH_DB_ID": notion_health_db_id.value_as_string,
+                "NOTION_WS_LIST_DB_ID": notion_ws_list_db_id.value_as_string,
                 "USE_MOCK_OPENAI": "false",
             },
         )
