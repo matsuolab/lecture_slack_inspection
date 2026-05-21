@@ -109,7 +109,7 @@ def test_run_moderation_passes_models_to_detector(mocker):
         judge_model="gpt-4o-mini",
         embedding_model="text-embedding-3-small",
     )
-    detector_instance.detect.assert_called_once_with("hello")
+    detector_instance.detect.assert_called_once_with("hello", extra_articles=None)
     assert result.is_violation is False
 
 
@@ -117,9 +117,6 @@ def test_violation_detector_uses_configured_models():
     client = MagicMock()
     client.chat.completions.create.return_value = MagicMock(
         choices=[MagicMock(message=MagicMock(content=json.dumps({"violation_score": 0, "confidence": 0.1, "reason": "ok"})))]
-    )
-    client.embeddings.create.return_value = MagicMock(
-        data=[MagicMock(embedding=[0.1, 0.2, 0.3])]
     )
 
     detector = ViolationDetector(
@@ -129,12 +126,9 @@ def test_violation_detector_uses_configured_models():
     )
 
     detector._judge_by_llm("sample text", [{"id": "A-001", "article": "A-001", "content": "rule"}])
-    detector._get_embedding("sample text")
 
     chat_kwargs = client.chat.completions.create.call_args.kwargs
-    embed_kwargs = client.embeddings.create.call_args.kwargs
     assert chat_kwargs["model"] == "gpt-4o-mini"
-    assert embed_kwargs["model"] == "text-embedding-3-small"
 
 def _build_message_changed_event(
     *,
