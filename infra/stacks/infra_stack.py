@@ -130,6 +130,8 @@ class InfraStack(Stack):
             type="String",
             default="",
             description="Notion Database ID for WS list master (team_id <-> workspace mapping).",
+        )
+            
         openai_model = CfnParameter(
             self,
             "OpenAIModel",
