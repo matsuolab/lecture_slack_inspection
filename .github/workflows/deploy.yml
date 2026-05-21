@@ -42,4 +42,8 @@ jobs:
             --parameters NotionDbId="${{ secrets.NOTION_DB_ID }}" \
             --parameters NotionTemplateDbId="${{ secrets.NOTION_TEMPLATE_DB_ID }}" \
             --parameters NotionArticlesDbId="${{ secrets.NOTION_ARTICLES_DB_ID }}" \
-            --parameters NotionHealthDbId="${{ secrets.NOTION_HEALTH_DB_ID }}"
+            --parameters NotionHealthDbId="${{ secrets.NOTION_HEALTH_DB_ID }}" \
+            --parameters OpenAIModel="${{ vars.OPENAI_MODEL }}" \
+            --parameters OpenAIEmbeddingModel="${{ vars.OPENAI_EMBEDDING_MODEL }}" \
+            --parameters GuidelinesText="${{ vars.GUIDELINES_TEXT }}" \
+            --parameters MinSeverityToAlert="${{ vars.MIN_SEVERITY_TO_ALERT }}"

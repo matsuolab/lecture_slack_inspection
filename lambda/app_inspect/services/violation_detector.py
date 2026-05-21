@@ -93,8 +93,17 @@ class DetectionResult:
 
 
 class ViolationDetector:
-    def __init__(self, openai_client, articles_path: str = None, ng_patterns_path: str = None):
+    def __init__(
+        self,
+        openai_client,
+        judge_model: str,
+        embedding_model: str,
+        articles_path: str = None,
+        ng_patterns_path: str = None,
+    ):
         self.client = openai_client
+        self.judge_model = judge_model
+        self.embedding_model = embedding_model
         self.articles = _load_json_list(
             articles_path or os.path.join(_COMMON_DATA_DIR, "articles.json"),
             "articles",
@@ -228,7 +237,7 @@ class ViolationDetector:
 
         try:
             resp = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.judge_model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format=_get_response_format(),
                 temperature=0,
@@ -256,7 +265,7 @@ class ViolationDetector:
             }
 
     def _get_embedding(self, text: str) -> list:
-        resp = self.client.embeddings.create(model="text-embedding-3-small", input=text)
+        resp = self.client.embeddings.create(model=self.embedding_model, input=text)
         return resp.data[0].embedding
 
     def _cosine_sim(self, v1: list, v2: list) -> float:

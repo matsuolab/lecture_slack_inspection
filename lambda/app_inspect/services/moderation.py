@@ -12,10 +12,19 @@ def _confidence_to_severity(confidence: float) -> str:
     return "low"
 
 
-def run_moderation(client: OpenAI, model: str, guidelines: str, message_text: str) -> ModerationResult:
+def run_moderation(
+    client: OpenAI,
+    model: str,
+    message_text: str,
+    embedding_model: str,
+) -> ModerationResult:
     """3段階違反検出: NGワード → RAG → LLM"""
     try:
-        detector = ViolationDetector(openai_client=client)
+        detector = ViolationDetector(
+            openai_client=client,
+            judge_model=model,
+            embedding_model=embedding_model,
+        )
         result = detector.detect(message_text)
 
         return normalize_result({

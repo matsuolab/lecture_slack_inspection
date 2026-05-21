@@ -9,6 +9,7 @@ class BatchConfig:
 
     openai_api_key: str
     openai_model: str
+    openai_embedding_model: str
 
     notion_api_key: str
     notion_db_id: str
@@ -35,6 +36,7 @@ def load_config(team_id: str) -> BatchConfig:
         slack_bot_token=slack_bot_token,
         openai_api_key=get_secret("OPENAI_API_KEY_PARAM_NAME"),
         openai_model=_get_env("OPENAI_MODEL", default="gpt-4o-mini"),
+        openai_embedding_model=_get_env("OPENAI_EMBEDDING_MODEL", default="text-embedding-3-small"),
         notion_api_key=get_secret("NOTION_API_KEY_PARAM_NAME"),
         notion_db_id=_get_env("NOTION_DB_ID"),
         notion_articles_db_id=_get_env("NOTION_ARTICLES_DB_ID"),

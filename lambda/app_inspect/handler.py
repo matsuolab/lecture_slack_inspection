@@ -48,8 +48,8 @@ def _build_moderation_executor(context: Any, cfg: Any) -> Callable[[str], Modera
             result = run_moderation(
                 openai_client,
                 cfg.openai_model,
-                cfg.guidelines_text,
                 text,
+                cfg.openai_embedding_model,
             )
 
         emit_metric(context, "InferenceLatencyMs", inference_timer.ms(), unit="Milliseconds")

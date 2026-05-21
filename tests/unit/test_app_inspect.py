@@ -1,7 +1,9 @@
 import json
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 import pytest
 from app_inspect.handler import lambda_handler
+from app_inspect.services.moderation import run_moderation
+from app_inspect.services.violation_detector import ViolationDetector
 
 jsonschema = pytest.importorskip("jsonschema")
 
@@ -80,6 +82,59 @@ def test_lambdaA_emits_contract_compliant_button_value(
     assert value["origin_ts"] == ev["ts"]
     assert value["trace_id"] == f"slack:{body['event_id']}"
     assert value.get("article_id") == "テスト条文 第1条"
+
+
+def test_run_moderation_passes_models_to_detector(mocker):
+    client = MagicMock()
+    detector_instance = MagicMock()
+    detector_instance.detect.return_value = MagicMock(
+        is_violation=False,
+        confidence=0.2,
+        category=None,
+        reason="ok",
+        article_id=None,
+        method="LLM",
+    )
+    detector_cls = mocker.patch("app_inspect.services.moderation.ViolationDetector", return_value=detector_instance)
+
+    result = run_moderation(
+        client=client,
+        model="gpt-4o-mini",
+        message_text="hello",
+        embedding_model="text-embedding-3-small",
+    )
+
+    detector_cls.assert_called_once_with(
+        openai_client=ANY,
+        judge_model="gpt-4o-mini",
+        embedding_model="text-embedding-3-small",
+    )
+    detector_instance.detect.assert_called_once_with("hello")
+    assert result.is_violation is False
+
+
+def test_violation_detector_uses_configured_models():
+    client = MagicMock()
+    client.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=MagicMock(content=json.dumps({"violation_score": 0, "confidence": 0.1, "reason": "ok"})))]
+    )
+    client.embeddings.create.return_value = MagicMock(
+        data=[MagicMock(embedding=[0.1, 0.2, 0.3])]
+    )
+
+    detector = ViolationDetector(
+        openai_client=client,
+        judge_model="gpt-4o-mini",
+        embedding_model="text-embedding-3-small",
+    )
+
+    detector._judge_by_llm("sample text", [{"id": "A-001", "article": "A-001", "content": "rule"}])
+    detector._get_embedding("sample text")
+
+    chat_kwargs = client.chat.completions.create.call_args.kwargs
+    embed_kwargs = client.embeddings.create.call_args.kwargs
+    assert chat_kwargs["model"] == "gpt-4o-mini"
+    assert embed_kwargs["model"] == "text-embedding-3-small"
 
 def _build_message_changed_event(
     *,

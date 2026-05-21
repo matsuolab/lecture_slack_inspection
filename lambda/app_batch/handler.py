@@ -115,7 +115,12 @@ def _moderate(cfg, openai_client, text: str) -> ModerationResult:
             article_id="mock_article_123",
             method="バッチLLM",
         )
-    result = run_moderation(openai_client, cfg.openai_model, cfg.guidelines_text, text)
+    result = run_moderation(
+        openai_client,
+        cfg.openai_model,
+        text,
+        cfg.openai_embedding_model,
+    )
     if result.is_violation:
         result = ModerationResult(
             is_violation=result.is_violation,

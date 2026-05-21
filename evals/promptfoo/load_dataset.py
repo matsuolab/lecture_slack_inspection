@@ -109,7 +109,7 @@ def csv_to_promptfoo_yaml(csv_path: str, output_path: Path, limit: int | None = 
             print(f"WARNING: 行 {i} の is_violation が不正 ({is_violation_str!r})。スキップします。")
             continue
 
-        is_violation = is_violation_str == "true"
+        is_violation = 1 if is_violation_str == "true" else 0
 
         # 自動生成の description
         violation_label = "違反" if is_violation else "非違反"
@@ -118,15 +118,16 @@ def csv_to_promptfoo_yaml(csv_path: str, output_path: Path, limit: int | None = 
 
         # Detection
         detection_assert_value = (
-            "const isCorrect = output.is_violation === context.vars.expected_is_violation;\n"
+            "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\n"
+            "const isCorrect = output_isViolation === context.vars.expected_is_violation;\n"
             "return {\n"
             "  pass: isCorrect,\n"
             "  score: isCorrect ? 1.0 : 0.0,\n"
-            "  reason: `Detection - Expected: ${context.vars.expected_is_violation}, Got: ${output.is_violation}`\n"
+            "  reason: `Detection - Expected: ${context.vars.expected_is_violation}, Got: ${output_isViolation}`\n"
             "};"
         )
 
-        # Aticle
+        # Article
         article_assert_value = (
             "const expectedIsViolation = context.vars.expected_is_violation;\n"
             "const expectedArticle = context.vars.expected_violating_article || '';\n"
@@ -148,7 +149,8 @@ def csv_to_promptfoo_yaml(csv_path: str, output_path: Path, limit: int | None = 
         )
       
         confidence_assert_value = (
-            "const isViolationCorrect = output.is_violation === context.vars.expected_is_violation;\n"
+            "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\n"
+            "const isViolationCorrect = output_isViolation === context.vars.expected_is_violation;\n"
             "const confidence = output.confidence ?? 0;\n"
             "const degree = context.vars.degree;\n"
             "let score, reason;\n"
