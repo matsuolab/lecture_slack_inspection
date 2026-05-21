@@ -140,22 +140,6 @@ class InfraStack(Stack):
             description="OpenAI model name for content moderation.",
         )
 
-        openai_embedding_model = CfnParameter(
-            self,
-            "OpenAIEmbeddingModel",
-            type="String",
-            default="text-embedding-3-small",
-            description="OpenAI embedding model for content analysis.",
-        )
-
-        guidelines_text = CfnParameter(
-            self,
-            "GuidelinesText",
-            type="String",
-            default="",
-            description="Community guidelines text for content moderation.",
-        )
-
         min_severity_to_alert = CfnParameter(
             self,
             "MinSeverityToAlert",
@@ -211,8 +195,6 @@ class InfraStack(Stack):
                 "NOTION_HEALTH_DB_ID": notion_health_db_id.value_as_string,
                 "NOTION_WS_LIST_DB_ID": notion_ws_list_db_id.value_as_string,
                 "OPENAI_MODEL": openai_model.value_as_string,
-                "OPENAI_EMBEDDING_MODEL": openai_embedding_model.value_as_string,
-                "GUIDELINES_TEXT": guidelines_text.value_as_string,
                 "MIN_SEVERITY_TO_ALERT": min_severity_to_alert.value_as_string,
                 "USE_MOCK_OPENAI": "false",
             },

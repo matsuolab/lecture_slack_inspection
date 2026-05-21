@@ -119,7 +119,6 @@ def _moderate(cfg, openai_client, text: str) -> ModerationResult:
         openai_client,
         cfg.openai_model,
         text,
-        cfg.openai_embedding_model,
     )
     if result.is_violation:
         result = ModerationResult(

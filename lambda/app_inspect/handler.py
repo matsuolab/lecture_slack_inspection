@@ -64,7 +64,6 @@ def _build_moderation_executor(
             result = run_moderation(
                 openai_client,
                 cfg.openai_model,
-                cfg.openai_embedding_model,
                 text,
                 extra_articles=extra_articles,
             )

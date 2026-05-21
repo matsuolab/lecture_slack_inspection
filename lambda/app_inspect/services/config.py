@@ -10,7 +10,6 @@ class InspectConfig:
 
     openai_api_key: str
     openai_model: str
-    openai_embedding_model: str
 
     notion_api_key: str
     notion_db_id: str
@@ -18,7 +17,6 @@ class InspectConfig:
     notion_articles_db_id: str
     notion_ws_list_db_id: str
 
-    guidelines_text: str
     min_severity_to_alert: str
 
     use_mock_openai: bool
@@ -27,17 +25,6 @@ def load_signing_secret() -> str:
     return get_secret("SLACK_SIGNING_SECRET_PARAM_NAME")
 
 def load_config(team_id: str) -> InspectConfig:
-    guidelines_text = os.getenv("GUIDELINES_TEXT", "").strip()
-    if not guidelines_text:
-        guidelines_text = (
-            "コミュニティガイドライン（簡易版）\n"
-            "- 個人情報の投稿は禁止\n"
-            "- 差別/ヘイト/誹謗中傷は禁止\n"
-            "- 暴力の扇動、違法行為の助長は禁止\n"
-            "- 過度な性的表現は禁止\n"
-            "- スパム/詐欺行為は禁止\n"
-        )
-
     def _get_env(name: str, required: bool = False, default: str = "") -> str:
         v = os.getenv(name, default)
         if required and not v:
@@ -64,10 +51,7 @@ def load_config(team_id: str) -> InspectConfig:
         notion_template_db_id=_get_env("NOTION_TEMPLATE_DB_ID"),
         notion_articles_db_id=_get_env("NOTION_ARTICLES_DB_ID"),
         notion_ws_list_db_id=_get_env("NOTION_WS_LIST_DB_ID"),
-
         openai_model=_get_env("OPENAI_MODEL"),
-        openai_embedding_model=_get_env("OPENAI_EMBEDDING_MODEL"),
-        guidelines_text=_get_env("GUIDELINES_TEXT", default=""),
         min_severity_to_alert=_get_env("MIN_SEVERITY_TO_ALERT"),
         use_mock_openai=_get_env("USE_MOCK_OPENAI", default="false").lower() == "true",
     )

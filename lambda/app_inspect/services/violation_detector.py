@@ -100,12 +100,10 @@ class ViolationDetector:
         self,
         openai_client,
         judge_model: str,
-        embedding_model: str,
         articles_path: str = None,
     ):
         self.client = openai_client
         self.judge_model = judge_model
-        self.embedding_model = embedding_model
         self.articles = _load_json_list(
             articles_path or os.path.join(_COMMON_DATA_DIR, "articles.json"),
             "articles",

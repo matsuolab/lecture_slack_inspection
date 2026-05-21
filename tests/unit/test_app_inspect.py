@@ -101,13 +101,11 @@ def test_run_moderation_passes_models_to_detector(mocker):
         client=client,
         model="gpt-4o-mini",
         message_text="hello",
-        embedding_model="text-embedding-3-small",
     )
 
     detector_cls.assert_called_once_with(
         openai_client=ANY,
         judge_model="gpt-4o-mini",
-        embedding_model="text-embedding-3-small",
     )
     detector_instance.detect.assert_called_once_with("hello", extra_articles=None)
     assert result.is_violation is False
@@ -122,7 +120,6 @@ def test_violation_detector_uses_configured_models():
     detector = ViolationDetector(
         openai_client=client,
         judge_model="gpt-4o-mini",
-        embedding_model="text-embedding-3-small",
     )
 
     detector._judge_by_llm("sample text", [{"id": "A-001", "article": "A-001", "content": "rule"}])

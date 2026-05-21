@@ -16,7 +16,6 @@ def _confidence_to_severity(confidence: float) -> str:
 def run_moderation(
     client: OpenAI,
     model: str,
-    embedding_model: str,
     message_text: str,
     extra_articles: Optional[list] = None,
 ) -> ModerationResult:
@@ -29,7 +28,6 @@ def run_moderation(
         detector = ViolationDetector(
             openai_client=client,
             judge_model=model,
-            embedding_model=embedding_model,
         )
         result = detector.detect(message_text, extra_articles=extra_articles)
 
