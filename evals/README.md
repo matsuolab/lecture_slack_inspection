@@ -45,8 +45,8 @@ pip install -r requirements.txt
 
 `OPENAI_API_KEY` が設定されている必要があります。
 
-```bash
-export OPENAI_API_KEY=sk-...
+```promptfoo/.env
+OPENAI_API_KEY=sk-...
 ```
 
 ---
@@ -92,7 +92,7 @@ npx promptfoo view
 
 | 条件 | スコア加算 | pass 判定 |
 |---|---|---|
-| `output.is_violation` が正解と一致 | +1.0 | ◯（これが pass の必須条件） |
+| `output.violation_score` が 51 以上 | +1.0 | ◯（これが pass の必須条件） |
 
 
 - **pass**: `is_violation` の正誤のみで判定

@@ -64,9 +64,9 @@ def _build_moderation_executor(
             result = run_moderation(
                 openai_client,
                 cfg.openai_model,
-                cfg.guidelines_text,
                 text,
                 extra_articles=extra_articles,
+                cfg.openai_embedding_model,
             )
 
         emit_metric(context, "InferenceLatencyMs", inference_timer.ms(), unit="Milliseconds")
@@ -134,6 +134,17 @@ def lambda_handler(event: dict, context: Any) -> dict:
             articles_db_id=cfg.notion_articles_db_id,
             ws_list_db_id=cfg.notion_ws_list_db_id,
         )
+
+        # 運営者名の判定ロジック
+        user_id = body_json.get("event", {}).get("user")
+        if user_id:
+            user_info = slack_client.users_info(user=user_id)
+            user_name = user_info.get("user", {}).get("real_name", "")
+            if "松尾研" in user_name:
+                return {"statusCode": 200, "body": "ignored_admin"}
+
+
+        notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id, cfg.notion_articles_db_id)
         moderate_text = _build_moderation_executor(context, cfg, notion, team_id)
 
         if inspect_event.kind == "new_message":

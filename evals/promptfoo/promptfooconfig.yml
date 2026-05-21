@@ -17,11 +17,12 @@ defaultTest:
     - type: javascript
       metric: Detection
       value: |
-        const isCorrect = output.is_violation === context.vars.expected_is_violation;
+        const output_isViolation = output.violation_score >= 51 ? 1 : 0;
+        const isCorrect = output_isViolation === context.vars.expected_is_violation;
         return {
           pass: isCorrect, 
           score: isCorrect ? 1.0 : 0.0,
-          reason: `Detection - Expected: ${context.vars.expected_is_violation}, Got: ${output.is_violation}`
+          reason: `Detection - Expected: ${context.vars.expected_is_violation}, Got: ${output_isViolation}`
         };
 
     - type: javascript
@@ -52,7 +53,8 @@ defaultTest:
       metric: confidence
       weight: 0 
       value: |
-        const isViolationCorrect = output.is_violation === context.vars.expected_is_violation;
+        const output_isViolation = output.violation_score >= 51 ? 1 : 0;
+        const isViolationCorrect = output_isViolation === context.vars.expected_is_violation;
         const confidence = output.confidence ?? 0;
         const degree = context.vars.degree;
         let score, reason;

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app_batch.services.scanner import iter_channel_messages
+from app_batch.handler import _moderate
 
 
 def _fake_aws_context():
@@ -101,3 +102,32 @@ class TestHandlerDryRun:
             result = lambda_handler({"channel_id": "C1"}, _fake_aws_context())
             assert result["ok"] is False
             assert "team_id" in result["error"]
+
+
+def test_moderate_passes_embedding_model_to_run_moderation(mocker):
+    cfg = MagicMock()
+    cfg.use_mock_openai = False
+    cfg.openai_model = "gpt-5.1-mini"
+    cfg.openai_embedding_model = "text-embedding-3-large"
+    cfg.guidelines_text = "guideline"
+
+    run_mock = mocker.patch("app_batch.handler.run_moderation")
+    run_mock.return_value = MagicMock(
+        is_violation=False,
+        severity="low",
+        categories=[],
+        rationale="ok",
+        recommended_reply="",
+        confidence=0.1,
+        article_id=None,
+        method="LLM",
+    )
+
+    _moderate(cfg, MagicMock(), "sample")
+
+    run_mock.assert_called_once_with(
+        mocker.ANY,
+        "gpt-5.1-mini",
+        "sample",
+        "text-embedding-3-large",
+    )

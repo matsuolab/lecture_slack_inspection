@@ -16,7 +16,7 @@ def _confidence_to_severity(confidence: float) -> str:
 def run_moderation(
     client: OpenAI,
     model: str,
-    guidelines: str,
+    embedding_model: str,
     message_text: str,
     extra_articles: Optional[list] = None,
 ) -> ModerationResult:
@@ -26,7 +26,11 @@ def run_moderation(
     紐付いた条文) を想定。
     """
     try:
-        detector = ViolationDetector(openai_client=client, model=model)
+        detector = ViolationDetector(
+            openai_client=client,
+            judge_model=model,
+            embedding_model=embedding_model,
+        )
         result = detector.detect(message_text, extra_articles=extra_articles)
 
         return normalize_result({

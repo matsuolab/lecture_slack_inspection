@@ -1,7 +1,7 @@
-"""違反検出モジュール: 全条文 → LLM 判定 (gpt-4o-mini)
+"""違反検出モジュール: 全条文 → LLM 判定
 
 旧仕様の RAG (関連条文 top_k=3 抽出) と NG ワード即確定経路は廃止済。
-gpt-4o-mini の context が十分広く、条文数も少数 (24+α) なので、
+context が十分広いモデルを用いる前提かつ、条文数も少数 (24+α) なので、
 articles.json + extra_articles (WS ローカルルール) を全部 LLM に渡す方式に統一。
 """
 import json
@@ -96,9 +96,16 @@ class DetectionResult:
 
 
 class ViolationDetector:
-    def __init__(self, openai_client, articles_path: str = None, model: str = "gpt-4o-mini"):
+    def __init__(
+        self,
+        openai_client,
+        judge_model: str,
+        embedding_model: str,
+        articles_path: str = None,
+    ):
         self.client = openai_client
-        self.model = model
+        self.judge_model = judge_model
+        self.embedding_model = embedding_model
         self.articles = _load_json_list(
             articles_path or os.path.join(_COMMON_DATA_DIR, "articles.json"),
             "articles",
@@ -169,7 +176,7 @@ class ViolationDetector:
 
         try:
             resp = self.client.chat.completions.create(
-                model=self.model,
+                model=self.judge_model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format=_get_response_format(),
                 temperature=0,
