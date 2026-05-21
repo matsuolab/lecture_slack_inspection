@@ -15,7 +15,6 @@ def _confidence_to_severity(confidence: float) -> str:
 def run_moderation(
     client: OpenAI,
     model: str,
-    guidelines: str,
     message_text: str,
     embedding_model: str,
 ) -> ModerationResult:

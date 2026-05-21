@@ -128,7 +128,6 @@ def test_moderate_passes_embedding_model_to_run_moderation(mocker):
     run_mock.assert_called_once_with(
         mocker.ANY,
         "gpt-5.1-mini",
-        "guideline",
         "sample",
         "text-embedding-3-large",
     )

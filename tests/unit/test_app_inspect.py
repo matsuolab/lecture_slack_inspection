@@ -100,7 +100,6 @@ def test_run_moderation_passes_models_to_detector(mocker):
     result = run_moderation(
         client=client,
         model="gpt-4o-mini",
-        guidelines="guideline",
         message_text="hello",
         embedding_model="text-embedding-3-small",
     )

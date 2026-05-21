@@ -118,7 +118,6 @@ def _moderate(cfg, openai_client, text: str) -> ModerationResult:
     result = run_moderation(
         openai_client,
         cfg.openai_model,
-        cfg.guidelines_text,
         text,
         cfg.openai_embedding_model,
     )
