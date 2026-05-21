@@ -62,6 +62,23 @@ class NotionClient:
         except Exception as e:
             logger.error(f"Duplicate check failed: {e}")
             return False
+        
+    def find_violation_by_message_ts(self, message_ts: str) -> Optional[dict[str, Any]]:
+        """Message_TS で違反レコードを1件取得する"""
+        if not self.db_id:
+            return None
+
+        try:
+            results = self._query({
+                "property": "Message_TS",
+                "rich_text": {"equals": message_ts},
+            })
+            return results[0] if results else None
+        except Exception as e:
+            logger.error(f"Find violation by message_ts failed: {e}")
+            return None
+
+
 
     def create_violation_log(
         self,
@@ -266,6 +283,11 @@ class NotionClient:
         if responder_name:
             props["再警告対応者"] = {"rich_text": [{"text": {"content": responder_name}}]}
         return self._update_page(page_id, props)
+    
+    def mark_closed_by_edit(self, page_id: str, responder_name: str = "") -> bool:
+        """投稿編集により違反ではなくなったケースを対応終了として扱う"""
+        return self.mark_closed(page_id,responder_name=responder_name)
+
 
     def update_admin_notification(
         self, page_id: str, admin_channel_id: str, admin_message_ts: str,
