@@ -263,19 +263,6 @@ class NotionClient:
             logger.error("Article page fetch failed for %s: %s", page_id, e)
             return None
 
-    def get_page(self, page_id: str) -> Optional[dict]:
-        """ページ情報を取得する"""
-        url = f"{_NOTION_API_BASE}/pages/{page_id}"
-        try:
-            resp = requests.get(url, headers=self.headers, timeout=10)
-            if not resp.ok:
-                logger.error("Page fetch failed for %s: %s", page_id, resp.status_code)
-                return None
-            return resp.json()
-        except Exception as e:
-            logger.error("Page fetch failed for %s: %s", page_id, e)
-            return None
-
     def _update_page(self, page_id: str, props: dict[str, Any]) -> bool:
         """ページプロパティを更新する共通メソッド"""
         url = f"{_NOTION_API_BASE}/pages/{page_id}"
@@ -414,8 +401,6 @@ class NotionClient:
         poster = poster_texts[0]["plain_text"] if poster_texts else None
         title_texts = props.get("投稿内容", {}).get("title", [])
         title = title_texts[0]["plain_text"] if title_texts else ""
-        additional_texts = props.get("追加メッセージ", {}).get("rich_text", [])
-        additional_message = additional_texts[0]["plain_text"] if additional_texts else ""
         relation_items = props.get("初回警告テンプレート", {}).get("relation", [])
         template_page_id = relation_items[0]["id"] if relation_items else ""
         article_relation = props.get("対象条文", {}).get("relation", [])
@@ -439,7 +424,6 @@ class NotionClient:
             "poster": poster,
             "title": title,
             "article_page_id": article_page_id,
-            "additional_message": additional_message,
             "template_page_id": template_page_id,
             "team_id": team_id,
             "rewarn_sent_at": rewarn_sent_at,

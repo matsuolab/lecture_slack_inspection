@@ -127,14 +127,8 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         cfg = load_config(team_id)
         slack_client = WebClient(token=cfg.slack_bot_token)
-        notion = NotionClient(
-            cfg.notion_api_key,
-            cfg.notion_db_id,
-            articles_db_id=cfg.notion_articles_db_id,
-            ws_list_db_id=cfg.notion_ws_list_db_id,
-        )
 
-        # 運営者名の判定ロジック
+        # 運営者 (松尾研スタッフ) の投稿は監視対象外
         user_id = body_json.get("event", {}).get("user")
         if user_id:
             user_info = slack_client.users_info(user=user_id)
@@ -142,8 +136,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
             if "松尾研" in user_name:
                 return {"statusCode": 200, "body": "ignored_admin"}
 
-
-        notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id, cfg.notion_articles_db_id)
+        notion = NotionClient(
+            cfg.notion_api_key,
+            cfg.notion_db_id,
+            articles_db_id=cfg.notion_articles_db_id,
+            ws_list_db_id=cfg.notion_ws_list_db_id,
+        )
         moderate_text = _build_moderation_executor(context, cfg, notion, team_id)
 
         if inspect_event.kind == "new_message":
