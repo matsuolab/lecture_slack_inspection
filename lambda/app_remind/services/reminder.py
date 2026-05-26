@@ -102,7 +102,7 @@ def _build_message(usage: str, fields: dict, notion_api_key: str = "", template_
         post_link=fields.get("post_link") or "",
         poster=fields.get("poster") or "",
     )
-    return compose_message(rendered, fields.get("additional_message", ""))
+    return compose_message(rendered)
 
 
 def _send_48h_notification(

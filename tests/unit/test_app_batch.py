@@ -104,11 +104,10 @@ class TestHandlerDryRun:
             assert "team_id" in result["error"]
 
 
-def test_moderate_passes_embedding_model_to_run_moderation(mocker):
+def test_moderate_passes_model_to_run_moderation(mocker):
     cfg = MagicMock()
     cfg.use_mock_openai = False
     cfg.openai_model = "gpt-5.1-mini"
-    cfg.openai_embedding_model = "text-embedding-3-large"
     cfg.guidelines_text = "guideline"
 
     run_mock = mocker.patch("app_batch.handler.run_moderation")
@@ -129,5 +128,4 @@ def test_moderate_passes_embedding_model_to_run_moderation(mocker):
         mocker.ANY,
         "gpt-5.1-mini",
         "sample",
-        "text-embedding-3-large",
     )

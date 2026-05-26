@@ -261,10 +261,6 @@ class TestProcessReminders:
         mock_notion.mark_48h_over.return_value = True
         mock_notion.mark_closed.return_value = True
         mock_notion.update_status.return_value = True
-        # get_page: デフォルトではページをそのまま返す（再取得でも同じ状態）
-        mock_notion.get_page.side_effect = lambda pid: next(
-            (p for p in pages if p["id"] == pid), None
-        )
         return mock_notion
 
     def test_48h_over_status_update(self):

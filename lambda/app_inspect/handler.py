@@ -26,7 +26,9 @@ def _decode_body(event: dict) -> str:
     return body
 
 
-def _build_moderation_executor(context: Any, cfg: Any) -> Callable[[str], ModerationResult]:
+def _build_moderation_executor(
+    context: Any, cfg: Any, notion: NotionClient, team_id: str,
+) -> Callable[[str], ModerationResult]:
     def _moderate(text: str) -> ModerationResult:
         log_info(context, action="start_moderation", text_length=len(text))
         inference_timer = Timer()
@@ -44,12 +46,26 @@ def _build_moderation_executor(context: Any, cfg: Any) -> Callable[[str], Modera
                 method="Mock",
             )
         else:
+            # WS ローカルルール条文を Notion から取得 (失敗しても本体処理は続行)
+            extra_articles: list = []
+            try:
+                ws_page_id = notion.query_workspace_page_id(team_id)
+                if ws_page_id:
+                    extra_articles = notion.query_workspace_local_rules(ws_page_id)
+                    if extra_articles:
+                        log_info(
+                            context, action="local_rules_fetched",
+                            team_id=team_id, count=len(extra_articles),
+                        )
+            except Exception as e:
+                log_error(context, action="fetch_local_rules", error=e)
+
             openai_client = OpenAI(api_key=cfg.openai_api_key)
             result = run_moderation(
                 openai_client,
                 cfg.openai_model,
                 text,
-                cfg.openai_embedding_model,
+                extra_articles=extra_articles,
             )
 
         emit_metric(context, "InferenceLatencyMs", inference_timer.ms(), unit="Milliseconds")
@@ -112,7 +128,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
         cfg = load_config(team_id)
         slack_client = WebClient(token=cfg.slack_bot_token)
 
-        # 運営者名の判定ロジック
+        # 運営者 (松尾研スタッフ) の投稿は監視対象外
         user_id = body_json.get("event", {}).get("user")
         if user_id:
             user_info = slack_client.users_info(user=user_id)
@@ -120,9 +136,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
             if "松尾研" in user_name:
                 return {"statusCode": 200, "body": "ignored_admin"}
 
-
-        notion = NotionClient(cfg.notion_api_key, cfg.notion_db_id, cfg.notion_articles_db_id)
-        moderate_text = _build_moderation_executor(context, cfg)
+        notion = NotionClient(
+            cfg.notion_api_key,
+            cfg.notion_db_id,
+            articles_db_id=cfg.notion_articles_db_id,
+            ws_list_db_id=cfg.notion_ws_list_db_id,
+        )
+        moderate_text = _build_moderation_executor(context, cfg, notion, team_id)
 
         if inspect_event.kind == "new_message":
             response = handle_new_message(

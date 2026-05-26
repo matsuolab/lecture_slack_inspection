@@ -21,6 +21,3 @@
 - リポジトリの `Settings > Security > Secrets and variables > Actions` を開く
 - `Variables`のタブで`New repository variable` をクリック
 - `Name` に `OPENAI_MODEL`、`Value` に例: `gpt-4o-mini` を入力して保存
-
-- 同様に、`OPENAI_EMBEDDING_MODEL` も必要に応じて設定する（例: `text-embedding-3-small`）
-  - ただし、現状embedding modelは評価フローを用意していない
