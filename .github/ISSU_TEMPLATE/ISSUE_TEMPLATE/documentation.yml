@@ -1,0 +1,28 @@
+name: ドキュメント修正・追加
+description: ドキュメント（README, Wiki, コメントなど）の追加・修正用テンプレート
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: 概要
+      description: 修正または追加したいドキュメントの概要を記載してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 詳細
+      description: 具体的にどの部分に何を追加・修正したいかを詳しく記載してください。
+    validations:
+      required: false
+
+  - type: textarea
+    id: supplement
+    attributes:
+      label: 補足
+      description: その他、ドキュメントに関する補足情報があれば記載してください。
+    validations:
+      required: false

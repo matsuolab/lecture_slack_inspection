@@ -1,0 +1,36 @@
+name: 改善・リファクタリング
+description: 既存コードの改善・リファクタリング用のテンプレート
+title: "[Improvement]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: 概要
+      description: 改善・リファクタリングの概要を記載してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: なぜその改善・リファクタリングが必要か、現在の問題点や不便さを具体的に説明してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: advantage
+    attributes:
+      label: 利点
+      description: 改善・リファクタリングをすることで、どのような利点があるのかを記載してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: supplement
+    attributes:
+      label: 補足
+      description: その他、改善・リファクタリングに関する補足情報があれば記載してください。
+    validations:
+      required: false
