@@ -52,11 +52,15 @@ def _build_moderation_executor(
                 ws_page_id = notion.query_workspace_page_id(team_id)
                 if ws_page_id:
                     extra_articles = notion.query_workspace_local_rules(ws_page_id)
-                    if extra_articles:
-                        log_info(
-                            context, action="local_rules_fetched",
-                            team_id=team_id, count=len(extra_articles),
-                        )
+                    log_info(
+                        context, action="local_rules_fetched",
+                        team_id=team_id, count=len(extra_articles),
+                    )
+                else:
+                    log_info(
+                        context, action="local_rules_skipped",
+                        team_id=team_id, reason="no_ws_page_id",
+                    )
             except Exception as e:
                 log_error(context, action="fetch_local_rules", error=e)
 

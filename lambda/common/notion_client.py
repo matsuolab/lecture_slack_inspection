@@ -24,6 +24,10 @@ class NotionClient:
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json"
         }
+        logger.info(
+            "NotionClient initialized: db_id=%s articles_db_id=%s health_db_id=%s ws_list_db_id=%s",
+            bool(db_id), bool(articles_db_id), bool(health_db_id), bool(ws_list_db_id),
+        )
 
     def query_workspace_page_id(self, team_id: str) -> Optional[str]:
         """WS 一覧マスタ DB から team_id (rich_text) で検索、該当ページの page_id を返す。
