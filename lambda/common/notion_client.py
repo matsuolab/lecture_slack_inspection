@@ -29,6 +29,10 @@ class NotionClient:
         """WS 一覧マスタ DB から team_id (rich_text) で検索、該当ページの page_id を返す。
         ヒットなし or エラー時は None。"""
         if not self.ws_list_db_id or not team_id:
+            logger.info(
+                "query_workspace_page_id skipped: ws_list_db_id=%r team_id=%r",
+                self.ws_list_db_id, team_id,
+            )
             return None
         url = f"{_NOTION_API_BASE}/databases/{self.ws_list_db_id}/query"
         body = {"filter": {"property": "team_id", "rich_text": {"equals": team_id}}}
@@ -50,7 +54,7 @@ class NotionClient:
         条件: workspace 列に該当 WS を含む AND 有効=True。
         Returns: [{id, article, content, category, regulation}, ...]
         """
-        if not self.articles_db_id or not workspace_page_id:
+        if not self.articles_db_id or not workspace_page_id: # fallbackではなく、無視になっている。->うまく処理が行かなくとも無視をする形式になっている。
             return []
         url = f"{_NOTION_API_BASE}/databases/{self.articles_db_id}/query"
         body = {
