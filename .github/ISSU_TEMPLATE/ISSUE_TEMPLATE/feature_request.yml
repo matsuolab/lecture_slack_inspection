@@ -1,0 +1,28 @@
+name: 機能追加
+description: 新しい機能用のテンプレート
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: 概要
+      description: 機能の概要を記載してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 実装
+      description: 機能をどのように実装するか、具体的なアイデアがあれば記載してください。
+    validations:
+      required: false
+
+  - type: textarea
+    id: supplement
+    attributes:
+      label: 補足
+      description: その他、機能に関する補足情報があれば記載してください。
+    validations:
+      required: false

@@ -1,0 +1,46 @@
+name: バグ報告
+description: バグ報告用のテンプレート
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: 概要
+      description: バグの概要を記載してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: process
+    attributes:
+      label: 再現手順
+      description: バグを再現させる手順を記載してください。
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browsers
+    attributes:
+      label: ブラウザ
+      description: バグを確認したブラウザを選択してください。
+      multiple: true
+      options:
+        - Chrome
+        - Edge
+        - Firefox
+        - Safari
+    validations:
+      required: true
+
+  - type: textarea
+    id: supplement
+    attributes:
+      label: 補足
+      description: その他、バグに関する補足情報があれば記載してください。
+    validations:
+      required: false
