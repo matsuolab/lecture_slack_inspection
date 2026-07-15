@@ -179,7 +179,7 @@ class InfraStack(Stack):
             "LambdaA_AppInspect",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_alert", "app_oauth", "app_remind", "app_batch"],
+                exclude=["app_alert", "app_oauth", "app_remind", "app_batch", "app_admin"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -213,7 +213,7 @@ class InfraStack(Stack):
             "LambdaB_AppAlert",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect", "app_oauth", "app_remind", "app_batch"],
+                exclude=["app_inspect", "app_oauth", "app_remind", "app_batch", "app_admin"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -241,7 +241,7 @@ class InfraStack(Stack):
             "LambdaC_SlackOAuth",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect", "app_alert", "app_remind", "app_batch"],
+                exclude=["app_inspect", "app_alert", "app_remind", "app_batch", "app_admin"],
             ),
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -269,7 +269,7 @@ class InfraStack(Stack):
             "LambdaD_AppRemind",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_inspect", "app_alert", "app_oauth", "app_batch"],
+                exclude=["app_inspect", "app_alert", "app_oauth", "app_batch", "app_admin"],
             ),
             timeout=Duration.seconds(60),
             memory_size=512,
@@ -308,7 +308,7 @@ class InfraStack(Stack):
             "LambdaE_AppBatch",
             code=_lambda.DockerImageCode.from_image_asset(
                 directory="../lambda/",
-                exclude=["app_alert", "app_oauth", "app_remind"],
+                exclude=["app_alert", "app_oauth", "app_remind", "app_admin"],
             ),
             timeout=Duration.seconds(900),
             memory_size=1024,
@@ -328,6 +328,29 @@ class InfraStack(Stack):
         lambda_e.node.default_child.add_property_override(
             "ImageConfig",
             {"Command": ["app_batch.handler.lambda_handler"]},
+        )
+
+        # -----------------------------
+        # 6.6 Lambda F: OAuth許可リスト管理 (app_admin)
+        # -----------------------------
+        lambda_f = _lambda.DockerImageFunction(
+            self,
+            "LambdaF_AppAdmin",
+            code=_lambda.DockerImageCode.from_image_asset(
+                directory="../lambda/",
+                exclude=["app_inspect", "app_alert", "app_oauth", "app_remind", "app_batch"],
+            ),
+            timeout=Duration.seconds(30),
+            memory_size=512,
+            log_retention=logs.RetentionDays.ONE_WEEK,
+            environment={
+                "OAUTH_ALLOWED_TEAM_IDS_PARAM_NAME": oauth_allowed_team_ids_param_name.value_as_string,
+            },
+        )
+
+        lambda_f.node.default_child.add_property_override(
+            "ImageConfig",
+            {"Command": ["app_admin.handler.lambda_handler"]},
         )
 
         # -----------------------------
@@ -366,6 +389,26 @@ class InfraStack(Stack):
         )
         lambda_c.add_to_role_policy(oauth_policy)
 
+        # app_admin: 許可リストのSSMパラメータ1個だけに限定した最小スコープ
+        admin_policy = iam.PolicyStatement(
+            actions=["ssm:GetParameter", "ssm:PutParameter"],
+            resources=[
+                get_param_arn(oauth_allowed_team_ids_param_name.value_as_string),
+            ],
+        )
+        lambda_f.add_to_role_policy(admin_policy)
+
+        # /admin/oauth-allowlist を呼び出すための専用IAMロール。
+        # x-api-key はAWS公式にも「認証・認可には使わない」ことが明記されているため
+        # (usage planはrate limiting/利用者識別用の仕組みでしかない)、
+        # IAM(SigV4)で呼び出し元を限定する。実際に呼び出す人/システムはこのロールをAssumeする。
+        admin_caller_role = iam.Role(
+            self,
+            "OAuthAllowlistAdminCallerRole",
+            assumed_by=iam.AccountPrincipal(self.account),
+            description="Assume this role (SigV4) to call POST /admin/oauth-allowlist",
+        )
+
         # -----------------------------
         # 8. API Gateway (Slack エンドポイント)
         # -----------------------------
@@ -380,6 +423,12 @@ class InfraStack(Stack):
                 metrics_enabled=True,
                 throttling_rate_limit=50,
                 throttling_burst_limit=100,
+                method_options={
+                    "/admin/oauth-allowlist/POST": apigw.MethodDeploymentOptions(
+                        throttling_rate_limit=1,
+                        throttling_burst_limit=5,
+                    ),
+                },
             ),
         )
 
@@ -389,6 +438,9 @@ class InfraStack(Stack):
         oauth = slack_root.add_resource("oauth")
         start = oauth.add_resource("start")
         callback = oauth.add_resource("callback")
+
+        admin = api.root.add_resource("admin")
+        oauth_allowlist = admin.add_resource("oauth-allowlist")
 
         # POST /slack/events -> Lambda A
         events_resource.add_method(
@@ -412,6 +464,23 @@ class InfraStack(Stack):
         callback.add_method(
             "GET",
             apigw.LambdaIntegration(lambda_c, proxy=True),
+        )
+
+        # POST /admin/oauth-allowlist -> Lambda F
+        # x-api-keyは「認証・認可の手段として使うべきではない」とAWS公式ドキュメントが
+        # 明記しているため(usage plan/api keyは利用量トラッキング用途のみ)、
+        # IAM(SigV4)で呼び出し元をadmin_caller_roleに限定する。
+        oauth_allowlist_method = oauth_allowlist.add_method(
+            "POST",
+            apigw.LambdaIntegration(lambda_f, proxy=True),
+            authorization_type=apigw.AuthorizationType.IAM,
+        )
+
+        admin_caller_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["execute-api:Invoke"],
+                resources=[oauth_allowlist_method.method_arn],
+            )
         )
 
         # -----------------------------
@@ -443,4 +512,18 @@ class InfraStack(Stack):
             "SlackOAuthRedirectUrl",
             value=f"{api.url}slack/oauth/callback",
             description="Redirect URL for Slack OAuth callback",
+        )
+
+        CfnOutput(
+            self,
+            "OAuthAllowlistAdminUrl",
+            value=f"{api.url}admin/oauth-allowlist",
+            description="URL for admin allowlist registration (requires SigV4 request signed as OAuthAllowlistAdminCallerRole)",
+        )
+
+        CfnOutput(
+            self,
+            "OAuthAllowlistAdminCallerRoleArn",
+            value=admin_caller_role.role_arn,
+            description="IAM role to assume (sts:AssumeRole) before calling /admin/oauth-allowlist with SigV4",
         )
