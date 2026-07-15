@@ -20,17 +20,20 @@ def _response(status_code: int, body: dict) -> dict:
 
 
 def _add_team_to_allowlist(team_id: str) -> str:
-    """許可リストに team_id を追加する。戻り値は added / duplicate"""
+    """許可リストに team_id を追加する。戻り値は added / duplicate
+
+    重複時にearly returnして書き込みを省略すると、SSMへの反映有無が
+    申請者からは見えず「登録されたはずが実は反映されていない」不安につながる。
+    そのため重複でも常にPutParameterを実行し、申請の都度リストを書き戻す。
+    """
     param_name = os.environ["OAUTH_ALLOWED_TEAM_IDS_PARAM_NAME"]
     current_value = get_parameter_by_name_no_cache(param_name)
     current_ids = {x.strip() for x in current_value.split(",") if x.strip()}
 
-    if team_id in current_ids:
-        return "duplicate"
-
+    result = "duplicate" if team_id in current_ids else "added"
     new_ids = sorted(current_ids | {team_id})
     put_secure_parameter(param_name, ",".join(new_ids))
-    return "added"
+    return result
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict:

@@ -45,8 +45,12 @@ def test_adds_new_team_id(monkeypatch, admin_common_mocks):
     ]
 
 
-def test_duplicate_team_id_is_skipped(monkeypatch, admin_common_mocks):
-    """既に許可リストにあるteam_idはduplicateを返し、書き込みは行わないこと"""
+def test_duplicate_team_id_still_writes(monkeypatch, admin_common_mocks):
+    """既に許可リストにあるteam_idはduplicateを返すが、SSMへの書き込みは常に実行すること
+
+    申請者からは「登録されたはずが実は反映されていない」状態が見えないようにするため、
+    重複判定はレスポンスの result にのみ反映し、書き込み自体は省略しない。
+    """
     monkeypatch.setattr(admin, "get_parameter_by_name_no_cache", lambda name: "T111,T222AAAAA")
 
     resp = admin.lambda_handler(_event("T222AAAAA"), {})
@@ -54,7 +58,9 @@ def test_duplicate_team_id_is_skipped(monkeypatch, admin_common_mocks):
     assert resp["statusCode"] == 200
     body = json.loads(resp["body"])
     assert body == {"result": "duplicate", "team_id": "T222AAAAA"}
-    assert admin_common_mocks["put_calls"] == []
+    assert admin_common_mocks["put_calls"] == [
+        ("/slack/oauth/allowed_team_ids", "T111,T222AAAAA"),
+    ]
 
 
 @pytest.mark.parametrize("team_id", ["", "invalid", "t111aaaaa", "T111"])
