@@ -409,6 +409,22 @@ class InfraStack(Stack):
             description="Assume this role (SigV4) to call POST /admin/oauth-allowlist",
         )
 
+        # GAS(Google Apps Script)はAssumeRoleを自前で実行できず、SigV4署名を
+        # 計算するには長期のAccessKey/SecretKeyが必要になる。
+        # そのためGAS専用のIAMユーザーを用意し、execute-api:Invokeをこの
+        # APIメソッド1つに限定する。SecretAccessKeyはCfnOutputに出さず、
+        # 払い出し直後にAWSコンソール/CLIで一度だけ確認してGASのScript
+        # Propertiesへ転記する運用とする(コードやOutputに平文で残さない)。
+        gas_caller_user = iam.User(
+            self,
+            "OAuthAllowlistGasCallerUser",
+        )
+        gas_caller_access_key = iam.CfnAccessKey(
+            self,
+            "OAuthAllowlistGasCallerAccessKey",
+            user_name=gas_caller_user.user_name,
+        )
+
         # -----------------------------
         # 8. API Gateway (Slack エンドポイント)
         # -----------------------------
@@ -483,6 +499,13 @@ class InfraStack(Stack):
             )
         )
 
+        gas_caller_user.add_to_policy(
+            iam.PolicyStatement(
+                actions=["execute-api:Invoke"],
+                resources=[oauth_allowlist_method.method_arn],
+            )
+        )
+
         # -----------------------------
         # 9. Outputs
         # -----------------------------
@@ -526,4 +549,16 @@ class InfraStack(Stack):
             "OAuthAllowlistAdminCallerRoleArn",
             value=admin_caller_role.role_arn,
             description="IAM role to assume (sts:AssumeRole) before calling /admin/oauth-allowlist with SigV4",
+        )
+
+        # SecretAccessKeyはCfnOutputに出さない(スタック情報に平文で残ってしまうため)。
+        # AccessKeyIdだけを出力し、SecretAccessKeyはデプロイ直後にAWSコンソール/CLIで
+        # 一度だけ確認してGASのScript Propertiesへ手動転記する。
+        CfnOutput(
+            self,
+            "OAuthAllowlistGasCallerAccessKeyId",
+            value=gas_caller_access_key.ref,
+            description="AccessKeyId for GAS to call /admin/oauth-allowlist with SigV4. "
+                         "SecretAccessKey is intentionally not output here; retrieve it once "
+                         "from the AWS Console/CLI right after deploy.",
         )
