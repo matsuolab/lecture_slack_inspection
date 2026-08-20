@@ -65,6 +65,8 @@ def _build_moderation_executor(
                 log_error(context, action="fetch_local_rules", error=e)
 
             openai_client = OpenAI(api_key=cfg.openai_api_key)
+            log_info(context, action="info_text", text=text[:20]) # 違反対象のメッセージ最初の20文字を記録
+            
             result = run_moderation(
                 openai_client,
                 cfg.openai_model,
