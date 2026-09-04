@@ -17,4 +17,6 @@ cdk.out/
 .pytest_cache/
 
 # Eval datasets (managed externally via Google Drive, not Git)
-evals/promptfoo/datasets/
+evals/promptfoo/datasets/*
+!evals/promptfoo/datasets/sample_testcases.csv
+!evals/promptfoo/datasets/testcases_preview.yaml

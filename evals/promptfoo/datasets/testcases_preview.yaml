@@ -1,0 +1,600 @@
+- description: '[違反] 条文:11-ix / 短文(15-50) / 悪意なし(無知・うっかり) / 明確な違反'
+  vars:
+    text: 連絡先は090-1234-5678です。個人LINEで直接やりとりしましょう。
+    articles_text: '- 11-i AI Community参加規約 第11条(i): 法令または公序良俗に違反する行為
+
+      - 11-ii AI Community参加規約 第11条(ii): 犯罪行為に関連する行為
+
+      - 11-iii AI Community参加規約 第11条(iii): 当研究室、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為
+
+      - 11-iv AI Community参加規約 第11条(iv): slack上でのやり取りやスクリーンショットを、SNS上にアップするといった行為
+
+      - 11-v AI Community参加規約 第11条(v): ネットワークビジネス、宗教等の勧誘行為
+
+      - 11-vi AI Community参加規約 第11条(vi): 講義の録画を無断で共有する行為
+
+      - 11-vii AI Community参加規約 第11条(vii): 当研究室のサービスの運営を妨害するおそれのある行為
+
+      - 11-viii AI Community参加規約 第11条(viii): 不正アクセスをし、またはこれを試みる行為
+
+      - 11-ix AI Community参加規約 第11条(ix): 他のユーザーに関する個人情報等を収集または蓄積する行為
+
+      - 11-x AI Community参加規約 第11条(x): 不正な目的を持って本サービスを利用する行為
+
+      - 11-xi AI Community参加規約 第11条(xi): 本サービスの他のユーザーまたはその他の第三者に不利益、損害、不快感を与える行為
+
+      - 11-xii AI Community参加規約 第11条(xii): 他のユーザーに成りすます行為
+
+      - 11-xiii AI Community参加規約 第11条(xiii): 当研究室が許諾しない本サービス上での宣伝、広告、勧誘、または営業行為
+
+      - 11-xiv AI Community参加規約 第11条(xiv): 面識のない異性との出会いを目的とした行為
+
+      - 11-xv AI Community参加規約 第11条(xv): 当研究室のサービスに関連して、反社会的勢力に対して直接または間接に利益を供与する行為
+
+      - 11-xvi AI Community参加規約 第11条(xvi): その他、当研究室が不適切と判断する行為
+
+      - edu-6 教育コンテンツ利用規約 第6条: 本教育コンテンツを第三者への提供・譲渡・貸与・公開・複製・頒布・翻案等をしてはなりません
+
+      - edu-8-iii 教育コンテンツ利用規約 第8条(iii): 本教育コンテンツを営利目的で使用する行為
+
+      - course-6 講座受講規約 第6条: ユーザーは、講座の録画・スクリーンショットを無断で行い、第三者に共有してはなりません
+
+      - course-8-ii 講座受講規約 第8条(ii): 講座内容の第三者への無断提供
+
+      - course-8-iv 講座受講規約 第8条(iv): 不正な手段による受講
+
+      - reg-3 講座受講用アカウント登録規約 第3条: アカウント情報を第三者に利用させ、または譲渡・貸与してはなりません
+
+      - community-4 AI Community参加規約 第4条: コミュニティ上でのコミュニケーションにおいて、敬意・礼節を持って接すること。ハラスメント、威圧的言動、差別的発言を行ってはならない
+
+      - community-5 AI Community参加規約 第5条: 投稿・発信した内容について、第三者の権利を侵害してはならない。投稿内容の正確性について責任を持つこと
+
+      - community-8 AI Community参加規約 第8条: 本サービスに関する著作権、知的所有権その他一切の権利は当研究室に帰属する。無断での複製・転載・改変を禁止する
+
+      - edu-3-ii 教育コンテンツ利用規約 第3条(ii): 教育コンテンツの転載・SNS・ネットワーク・サービス等へのアップロード行為
+
+      - edu-3-iii 教育コンテンツ利用規約 第3条(iii): 教育コンテンツの改変・翻案行為
+
+      - course-8-i 講座受講規約 第8条(i): 講座受講に関連して法令に違反する行為
+
+      - course-8-iii 講座受講規約 第8条(iii): 当研究室の信用を損なう行為
+
+      - course-10-ip 講座受講規約 第10条: 特許権、商標権、著作権その他の知的財産権を侵害する行為。講座コンテンツのリバースエンジニアリングを禁止する
+
+      - course-10-compete 講座受講規約 第10条: 当研究室のサービスで得た情報を競合他社に提供する行為。講座コンテンツを自社サービスでの広告、宣伝、転売に利用する行為'
+    expected_is_violation: 1
+    expected_violating_article: 11-ix
+    length: 短文(15-50)
+    intent: 悪意なし(無知・うっかり)
+    degree: 明確な違反
+    noise: なし
+  assert:
+  - type: javascript
+    metric: Detection
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isCorrect = output_isViolation === context.vars.expected_is_violation;\nreturn\
+      \ {\n  pass: isCorrect,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Detection\
+      \ - Expected: ${context.vars.expected_is_violation}, Got: ${output_isViolation}`\n\
+      };"
+  - type: javascript
+    metric: Article
+    value: "const expectedIsViolation = context.vars.expected_is_violation;\nconst\
+      \ expectedArticle = context.vars.expected_violating_article || '';\nconst gotArticle\
+      \ = output.article_id || '';\nlet isCorrect = false;\nlet reason = '';\nif (expectedIsViolation)\
+      \ {\n  isCorrect = String(expectedArticle) === String(gotArticle);\n  reason\
+      \ = isCorrect ? 'Match' : `Expected: ${expectedArticle}, Got: ${gotArticle}`;\n\
+      } else {\n  isCorrect = true;\n  reason = 'Ignored (Non-violation case)';\n\
+      }\nreturn {\n  pass: true,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Article\
+      \ Check - ${reason}`\n};"
+  - type: javascript
+    metric: confidence
+    weight: 0
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isViolationCorrect = output_isViolation === context.vars.expected_is_violation;\n\
+      const confidence = output.confidence ?? 0;\nconst degree = context.vars.degree;\n\
+      let score, reason;\nif (isViolationCorrect) {\n  score = degree === '明確な違反'\n\
+      \    ? (confidence >= 0.8 ? 1.0 : confidence >= 0.6 ? 0.7 : 0.3)\n    : (confidence\
+      \ >= 0.5 ? 1.0 : 0.5);\n  reason = `correct, confidence=${confidence} (${degree})`;\n\
+      } else {\n  score = Math.max(0, 1.0 - confidence);\n  reason = `wrong prediction,\
+      \ confidence=${confidence} (overconfidence penalty)`;\n}\nreturn { pass: true,\
+      \ score, reason };"
+- description: '[違反] 条文:11-iv / 短文(15-50) / 悪意あり(確信犯) / 明確な違反'
+  vars:
+    text: このスレッド面白いからスクショ撮ってTwitterに載せよう。
+    articles_text: '- 11-i AI Community参加規約 第11条(i): 法令または公序良俗に違反する行為
+
+      - 11-ii AI Community参加規約 第11条(ii): 犯罪行為に関連する行為
+
+      - 11-iii AI Community参加規約 第11条(iii): 当研究室、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為
+
+      - 11-iv AI Community参加規約 第11条(iv): slack上でのやり取りやスクリーンショットを、SNS上にアップするといった行為
+
+      - 11-v AI Community参加規約 第11条(v): ネットワークビジネス、宗教等の勧誘行為
+
+      - 11-vi AI Community参加規約 第11条(vi): 講義の録画を無断で共有する行為
+
+      - 11-vii AI Community参加規約 第11条(vii): 当研究室のサービスの運営を妨害するおそれのある行為
+
+      - 11-viii AI Community参加規約 第11条(viii): 不正アクセスをし、またはこれを試みる行為
+
+      - 11-ix AI Community参加規約 第11条(ix): 他のユーザーに関する個人情報等を収集または蓄積する行為
+
+      - 11-x AI Community参加規約 第11条(x): 不正な目的を持って本サービスを利用する行為
+
+      - 11-xi AI Community参加規約 第11条(xi): 本サービスの他のユーザーまたはその他の第三者に不利益、損害、不快感を与える行為
+
+      - 11-xii AI Community参加規約 第11条(xii): 他のユーザーに成りすます行為
+
+      - 11-xiii AI Community参加規約 第11条(xiii): 当研究室が許諾しない本サービス上での宣伝、広告、勧誘、または営業行為
+
+      - 11-xiv AI Community参加規約 第11条(xiv): 面識のない異性との出会いを目的とした行為
+
+      - 11-xv AI Community参加規約 第11条(xv): 当研究室のサービスに関連して、反社会的勢力に対して直接または間接に利益を供与する行為
+
+      - 11-xvi AI Community参加規約 第11条(xvi): その他、当研究室が不適切と判断する行為
+
+      - edu-6 教育コンテンツ利用規約 第6条: 本教育コンテンツを第三者への提供・譲渡・貸与・公開・複製・頒布・翻案等をしてはなりません
+
+      - edu-8-iii 教育コンテンツ利用規約 第8条(iii): 本教育コンテンツを営利目的で使用する行為
+
+      - course-6 講座受講規約 第6条: ユーザーは、講座の録画・スクリーンショットを無断で行い、第三者に共有してはなりません
+
+      - course-8-ii 講座受講規約 第8条(ii): 講座内容の第三者への無断提供
+
+      - course-8-iv 講座受講規約 第8条(iv): 不正な手段による受講
+
+      - reg-3 講座受講用アカウント登録規約 第3条: アカウント情報を第三者に利用させ、または譲渡・貸与してはなりません
+
+      - community-4 AI Community参加規約 第4条: コミュニティ上でのコミュニケーションにおいて、敬意・礼節を持って接すること。ハラスメント、威圧的言動、差別的発言を行ってはならない
+
+      - community-5 AI Community参加規約 第5条: 投稿・発信した内容について、第三者の権利を侵害してはならない。投稿内容の正確性について責任を持つこと
+
+      - community-8 AI Community参加規約 第8条: 本サービスに関する著作権、知的所有権その他一切の権利は当研究室に帰属する。無断での複製・転載・改変を禁止する
+
+      - edu-3-ii 教育コンテンツ利用規約 第3条(ii): 教育コンテンツの転載・SNS・ネットワーク・サービス等へのアップロード行為
+
+      - edu-3-iii 教育コンテンツ利用規約 第3条(iii): 教育コンテンツの改変・翻案行為
+
+      - course-8-i 講座受講規約 第8条(i): 講座受講に関連して法令に違反する行為
+
+      - course-8-iii 講座受講規約 第8条(iii): 当研究室の信用を損なう行為
+
+      - course-10-ip 講座受講規約 第10条: 特許権、商標権、著作権その他の知的財産権を侵害する行為。講座コンテンツのリバースエンジニアリングを禁止する
+
+      - course-10-compete 講座受講規約 第10条: 当研究室のサービスで得た情報を競合他社に提供する行為。講座コンテンツを自社サービスでの広告、宣伝、転売に利用する行為'
+    expected_is_violation: 1
+    expected_violating_article: 11-iv
+    length: 短文(15-50)
+    intent: 悪意あり(確信犯)
+    degree: 明確な違反
+    noise: なし
+  assert:
+  - type: javascript
+    metric: Detection
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isCorrect = output_isViolation === context.vars.expected_is_violation;\nreturn\
+      \ {\n  pass: isCorrect,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Detection\
+      \ - Expected: ${context.vars.expected_is_violation}, Got: ${output_isViolation}`\n\
+      };"
+  - type: javascript
+    metric: Article
+    value: "const expectedIsViolation = context.vars.expected_is_violation;\nconst\
+      \ expectedArticle = context.vars.expected_violating_article || '';\nconst gotArticle\
+      \ = output.article_id || '';\nlet isCorrect = false;\nlet reason = '';\nif (expectedIsViolation)\
+      \ {\n  isCorrect = String(expectedArticle) === String(gotArticle);\n  reason\
+      \ = isCorrect ? 'Match' : `Expected: ${expectedArticle}, Got: ${gotArticle}`;\n\
+      } else {\n  isCorrect = true;\n  reason = 'Ignored (Non-violation case)';\n\
+      }\nreturn {\n  pass: true,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Article\
+      \ Check - ${reason}`\n};"
+  - type: javascript
+    metric: confidence
+    weight: 0
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isViolationCorrect = output_isViolation === context.vars.expected_is_violation;\n\
+      const confidence = output.confidence ?? 0;\nconst degree = context.vars.degree;\n\
+      let score, reason;\nif (isViolationCorrect) {\n  score = degree === '明確な違反'\n\
+      \    ? (confidence >= 0.8 ? 1.0 : confidence >= 0.6 ? 0.7 : 0.3)\n    : (confidence\
+      \ >= 0.5 ? 1.0 : 0.5);\n  reason = `correct, confidence=${confidence} (${degree})`;\n\
+      } else {\n  score = Math.max(0, 1.0 - confidence);\n  reason = `wrong prediction,\
+      \ confidence=${confidence} (overconfidence penalty)`;\n}\nreturn { pass: true,\
+      \ score, reason };"
+- description: '[違反] 条文:11-v / 中文(50-200) / 悪意あり(確信犯) / 明確な違反'
+  vars:
+    text: 副業で月100万円稼げる方法教えます、興味ある方はDMください。
+    articles_text: '- 11-i AI Community参加規約 第11条(i): 法令または公序良俗に違反する行為
+
+      - 11-ii AI Community参加規約 第11条(ii): 犯罪行為に関連する行為
+
+      - 11-iii AI Community参加規約 第11条(iii): 当研究室、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為
+
+      - 11-iv AI Community参加規約 第11条(iv): slack上でのやり取りやスクリーンショットを、SNS上にアップするといった行為
+
+      - 11-v AI Community参加規約 第11条(v): ネットワークビジネス、宗教等の勧誘行為
+
+      - 11-vi AI Community参加規約 第11条(vi): 講義の録画を無断で共有する行為
+
+      - 11-vii AI Community参加規約 第11条(vii): 当研究室のサービスの運営を妨害するおそれのある行為
+
+      - 11-viii AI Community参加規約 第11条(viii): 不正アクセスをし、またはこれを試みる行為
+
+      - 11-ix AI Community参加規約 第11条(ix): 他のユーザーに関する個人情報等を収集または蓄積する行為
+
+      - 11-x AI Community参加規約 第11条(x): 不正な目的を持って本サービスを利用する行為
+
+      - 11-xi AI Community参加規約 第11条(xi): 本サービスの他のユーザーまたはその他の第三者に不利益、損害、不快感を与える行為
+
+      - 11-xii AI Community参加規約 第11条(xii): 他のユーザーに成りすます行為
+
+      - 11-xiii AI Community参加規約 第11条(xiii): 当研究室が許諾しない本サービス上での宣伝、広告、勧誘、または営業行為
+
+      - 11-xiv AI Community参加規約 第11条(xiv): 面識のない異性との出会いを目的とした行為
+
+      - 11-xv AI Community参加規約 第11条(xv): 当研究室のサービスに関連して、反社会的勢力に対して直接または間接に利益を供与する行為
+
+      - 11-xvi AI Community参加規約 第11条(xvi): その他、当研究室が不適切と判断する行為
+
+      - edu-6 教育コンテンツ利用規約 第6条: 本教育コンテンツを第三者への提供・譲渡・貸与・公開・複製・頒布・翻案等をしてはなりません
+
+      - edu-8-iii 教育コンテンツ利用規約 第8条(iii): 本教育コンテンツを営利目的で使用する行為
+
+      - course-6 講座受講規約 第6条: ユーザーは、講座の録画・スクリーンショットを無断で行い、第三者に共有してはなりません
+
+      - course-8-ii 講座受講規約 第8条(ii): 講座内容の第三者への無断提供
+
+      - course-8-iv 講座受講規約 第8条(iv): 不正な手段による受講
+
+      - reg-3 講座受講用アカウント登録規約 第3条: アカウント情報を第三者に利用させ、または譲渡・貸与してはなりません
+
+      - community-4 AI Community参加規約 第4条: コミュニティ上でのコミュニケーションにおいて、敬意・礼節を持って接すること。ハラスメント、威圧的言動、差別的発言を行ってはならない
+
+      - community-5 AI Community参加規約 第5条: 投稿・発信した内容について、第三者の権利を侵害してはならない。投稿内容の正確性について責任を持つこと
+
+      - community-8 AI Community参加規約 第8条: 本サービスに関する著作権、知的所有権その他一切の権利は当研究室に帰属する。無断での複製・転載・改変を禁止する
+
+      - edu-3-ii 教育コンテンツ利用規約 第3条(ii): 教育コンテンツの転載・SNS・ネットワーク・サービス等へのアップロード行為
+
+      - edu-3-iii 教育コンテンツ利用規約 第3条(iii): 教育コンテンツの改変・翻案行為
+
+      - course-8-i 講座受講規約 第8条(i): 講座受講に関連して法令に違反する行為
+
+      - course-8-iii 講座受講規約 第8条(iii): 当研究室の信用を損なう行為
+
+      - course-10-ip 講座受講規約 第10条: 特許権、商標権、著作権その他の知的財産権を侵害する行為。講座コンテンツのリバースエンジニアリングを禁止する
+
+      - course-10-compete 講座受講規約 第10条: 当研究室のサービスで得た情報を競合他社に提供する行為。講座コンテンツを自社サービスでの広告、宣伝、転売に利用する行為'
+    expected_is_violation: 1
+    expected_violating_article: 11-v
+    length: 中文(50-200)
+    intent: 悪意あり(確信犯)
+    degree: 明確な違反
+    noise: なし
+  assert:
+  - type: javascript
+    metric: Detection
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isCorrect = output_isViolation === context.vars.expected_is_violation;\nreturn\
+      \ {\n  pass: isCorrect,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Detection\
+      \ - Expected: ${context.vars.expected_is_violation}, Got: ${output_isViolation}`\n\
+      };"
+  - type: javascript
+    metric: Article
+    value: "const expectedIsViolation = context.vars.expected_is_violation;\nconst\
+      \ expectedArticle = context.vars.expected_violating_article || '';\nconst gotArticle\
+      \ = output.article_id || '';\nlet isCorrect = false;\nlet reason = '';\nif (expectedIsViolation)\
+      \ {\n  isCorrect = String(expectedArticle) === String(gotArticle);\n  reason\
+      \ = isCorrect ? 'Match' : `Expected: ${expectedArticle}, Got: ${gotArticle}`;\n\
+      } else {\n  isCorrect = true;\n  reason = 'Ignored (Non-violation case)';\n\
+      }\nreturn {\n  pass: true,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Article\
+      \ Check - ${reason}`\n};"
+  - type: javascript
+    metric: confidence
+    weight: 0
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isViolationCorrect = output_isViolation === context.vars.expected_is_violation;\n\
+      const confidence = output.confidence ?? 0;\nconst degree = context.vars.degree;\n\
+      let score, reason;\nif (isViolationCorrect) {\n  score = degree === '明確な違反'\n\
+      \    ? (confidence >= 0.8 ? 1.0 : confidence >= 0.6 ? 0.7 : 0.3)\n    : (confidence\
+      \ >= 0.5 ? 1.0 : 0.5);\n  reason = `correct, confidence=${confidence} (${degree})`;\n\
+      } else {\n  score = Math.max(0, 1.0 - confidence);\n  reason = `wrong prediction,\
+      \ confidence=${confidence} (overconfidence penalty)`;\n}\nreturn { pass: true,\
+      \ score, reason };"
+- description: '[非違反] 条文:なし / 短文(15-50) / 悪意なし(無知・うっかり) / '
+  vars:
+    text: 今日の講義資料、次回の予習に使えるので見ておいてください。
+    articles_text: '- 11-i AI Community参加規約 第11条(i): 法令または公序良俗に違反する行為
+
+      - 11-ii AI Community参加規約 第11条(ii): 犯罪行為に関連する行為
+
+      - 11-iii AI Community参加規約 第11条(iii): 当研究室、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為
+
+      - 11-iv AI Community参加規約 第11条(iv): slack上でのやり取りやスクリーンショットを、SNS上にアップするといった行為
+
+      - 11-v AI Community参加規約 第11条(v): ネットワークビジネス、宗教等の勧誘行為
+
+      - 11-vi AI Community参加規約 第11条(vi): 講義の録画を無断で共有する行為
+
+      - 11-vii AI Community参加規約 第11条(vii): 当研究室のサービスの運営を妨害するおそれのある行為
+
+      - 11-viii AI Community参加規約 第11条(viii): 不正アクセスをし、またはこれを試みる行為
+
+      - 11-ix AI Community参加規約 第11条(ix): 他のユーザーに関する個人情報等を収集または蓄積する行為
+
+      - 11-x AI Community参加規約 第11条(x): 不正な目的を持って本サービスを利用する行為
+
+      - 11-xi AI Community参加規約 第11条(xi): 本サービスの他のユーザーまたはその他の第三者に不利益、損害、不快感を与える行為
+
+      - 11-xii AI Community参加規約 第11条(xii): 他のユーザーに成りすます行為
+
+      - 11-xiii AI Community参加規約 第11条(xiii): 当研究室が許諾しない本サービス上での宣伝、広告、勧誘、または営業行為
+
+      - 11-xiv AI Community参加規約 第11条(xiv): 面識のない異性との出会いを目的とした行為
+
+      - 11-xv AI Community参加規約 第11条(xv): 当研究室のサービスに関連して、反社会的勢力に対して直接または間接に利益を供与する行為
+
+      - 11-xvi AI Community参加規約 第11条(xvi): その他、当研究室が不適切と判断する行為
+
+      - edu-6 教育コンテンツ利用規約 第6条: 本教育コンテンツを第三者への提供・譲渡・貸与・公開・複製・頒布・翻案等をしてはなりません
+
+      - edu-8-iii 教育コンテンツ利用規約 第8条(iii): 本教育コンテンツを営利目的で使用する行為
+
+      - course-6 講座受講規約 第6条: ユーザーは、講座の録画・スクリーンショットを無断で行い、第三者に共有してはなりません
+
+      - course-8-ii 講座受講規約 第8条(ii): 講座内容の第三者への無断提供
+
+      - course-8-iv 講座受講規約 第8条(iv): 不正な手段による受講
+
+      - reg-3 講座受講用アカウント登録規約 第3条: アカウント情報を第三者に利用させ、または譲渡・貸与してはなりません
+
+      - community-4 AI Community参加規約 第4条: コミュニティ上でのコミュニケーションにおいて、敬意・礼節を持って接すること。ハラスメント、威圧的言動、差別的発言を行ってはならない
+
+      - community-5 AI Community参加規約 第5条: 投稿・発信した内容について、第三者の権利を侵害してはならない。投稿内容の正確性について責任を持つこと
+
+      - community-8 AI Community参加規約 第8条: 本サービスに関する著作権、知的所有権その他一切の権利は当研究室に帰属する。無断での複製・転載・改変を禁止する
+
+      - edu-3-ii 教育コンテンツ利用規約 第3条(ii): 教育コンテンツの転載・SNS・ネットワーク・サービス等へのアップロード行為
+
+      - edu-3-iii 教育コンテンツ利用規約 第3条(iii): 教育コンテンツの改変・翻案行為
+
+      - course-8-i 講座受講規約 第8条(i): 講座受講に関連して法令に違反する行為
+
+      - course-8-iii 講座受講規約 第8条(iii): 当研究室の信用を損なう行為
+
+      - course-10-ip 講座受講規約 第10条: 特許権、商標権、著作権その他の知的財産権を侵害する行為。講座コンテンツのリバースエンジニアリングを禁止する
+
+      - course-10-compete 講座受講規約 第10条: 当研究室のサービスで得た情報を競合他社に提供する行為。講座コンテンツを自社サービスでの広告、宣伝、転売に利用する行為'
+    expected_is_violation: 0
+    expected_violating_article: ''
+    length: 短文(15-50)
+    intent: 悪意なし(無知・うっかり)
+    degree: ''
+    noise: なし
+  assert:
+  - type: javascript
+    metric: Detection
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isCorrect = output_isViolation === context.vars.expected_is_violation;\nreturn\
+      \ {\n  pass: isCorrect,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Detection\
+      \ - Expected: ${context.vars.expected_is_violation}, Got: ${output_isViolation}`\n\
+      };"
+  - type: javascript
+    metric: Article
+    value: "const expectedIsViolation = context.vars.expected_is_violation;\nconst\
+      \ expectedArticle = context.vars.expected_violating_article || '';\nconst gotArticle\
+      \ = output.article_id || '';\nlet isCorrect = false;\nlet reason = '';\nif (expectedIsViolation)\
+      \ {\n  isCorrect = String(expectedArticle) === String(gotArticle);\n  reason\
+      \ = isCorrect ? 'Match' : `Expected: ${expectedArticle}, Got: ${gotArticle}`;\n\
+      } else {\n  isCorrect = true;\n  reason = 'Ignored (Non-violation case)';\n\
+      }\nreturn {\n  pass: true,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Article\
+      \ Check - ${reason}`\n};"
+  - type: javascript
+    metric: confidence
+    weight: 0
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isViolationCorrect = output_isViolation === context.vars.expected_is_violation;\n\
+      const confidence = output.confidence ?? 0;\nconst degree = context.vars.degree;\n\
+      let score, reason;\nif (isViolationCorrect) {\n  score = degree === '明確な違反'\n\
+      \    ? (confidence >= 0.8 ? 1.0 : confidence >= 0.6 ? 0.7 : 0.3)\n    : (confidence\
+      \ >= 0.5 ? 1.0 : 0.5);\n  reason = `correct, confidence=${confidence} (${degree})`;\n\
+      } else {\n  score = Math.max(0, 1.0 - confidence);\n  reason = `wrong prediction,\
+      \ confidence=${confidence} (overconfidence penalty)`;\n}\nreturn { pass: true,\
+      \ score, reason };"
+- description: '[非違反] 条文:なし / 中文(50-200) / 悪意なし(無知・うっかり) / '
+  vars:
+    text: みなさんお疲れ様です。本日の講座はとても勉強になりました、ありがとうございました！
+    articles_text: '- 11-i AI Community参加規約 第11条(i): 法令または公序良俗に違反する行為
+
+      - 11-ii AI Community参加規約 第11条(ii): 犯罪行為に関連する行為
+
+      - 11-iii AI Community参加規約 第11条(iii): 当研究室、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為
+
+      - 11-iv AI Community参加規約 第11条(iv): slack上でのやり取りやスクリーンショットを、SNS上にアップするといった行為
+
+      - 11-v AI Community参加規約 第11条(v): ネットワークビジネス、宗教等の勧誘行為
+
+      - 11-vi AI Community参加規約 第11条(vi): 講義の録画を無断で共有する行為
+
+      - 11-vii AI Community参加規約 第11条(vii): 当研究室のサービスの運営を妨害するおそれのある行為
+
+      - 11-viii AI Community参加規約 第11条(viii): 不正アクセスをし、またはこれを試みる行為
+
+      - 11-ix AI Community参加規約 第11条(ix): 他のユーザーに関する個人情報等を収集または蓄積する行為
+
+      - 11-x AI Community参加規約 第11条(x): 不正な目的を持って本サービスを利用する行為
+
+      - 11-xi AI Community参加規約 第11条(xi): 本サービスの他のユーザーまたはその他の第三者に不利益、損害、不快感を与える行為
+
+      - 11-xii AI Community参加規約 第11条(xii): 他のユーザーに成りすます行為
+
+      - 11-xiii AI Community参加規約 第11条(xiii): 当研究室が許諾しない本サービス上での宣伝、広告、勧誘、または営業行為
+
+      - 11-xiv AI Community参加規約 第11条(xiv): 面識のない異性との出会いを目的とした行為
+
+      - 11-xv AI Community参加規約 第11条(xv): 当研究室のサービスに関連して、反社会的勢力に対して直接または間接に利益を供与する行為
+
+      - 11-xvi AI Community参加規約 第11条(xvi): その他、当研究室が不適切と判断する行為
+
+      - edu-6 教育コンテンツ利用規約 第6条: 本教育コンテンツを第三者への提供・譲渡・貸与・公開・複製・頒布・翻案等をしてはなりません
+
+      - edu-8-iii 教育コンテンツ利用規約 第8条(iii): 本教育コンテンツを営利目的で使用する行為
+
+      - course-6 講座受講規約 第6条: ユーザーは、講座の録画・スクリーンショットを無断で行い、第三者に共有してはなりません
+
+      - course-8-ii 講座受講規約 第8条(ii): 講座内容の第三者への無断提供
+
+      - course-8-iv 講座受講規約 第8条(iv): 不正な手段による受講
+
+      - reg-3 講座受講用アカウント登録規約 第3条: アカウント情報を第三者に利用させ、または譲渡・貸与してはなりません
+
+      - community-4 AI Community参加規約 第4条: コミュニティ上でのコミュニケーションにおいて、敬意・礼節を持って接すること。ハラスメント、威圧的言動、差別的発言を行ってはならない
+
+      - community-5 AI Community参加規約 第5条: 投稿・発信した内容について、第三者の権利を侵害してはならない。投稿内容の正確性について責任を持つこと
+
+      - community-8 AI Community参加規約 第8条: 本サービスに関する著作権、知的所有権その他一切の権利は当研究室に帰属する。無断での複製・転載・改変を禁止する
+
+      - edu-3-ii 教育コンテンツ利用規約 第3条(ii): 教育コンテンツの転載・SNS・ネットワーク・サービス等へのアップロード行為
+
+      - edu-3-iii 教育コンテンツ利用規約 第3条(iii): 教育コンテンツの改変・翻案行為
+
+      - course-8-i 講座受講規約 第8条(i): 講座受講に関連して法令に違反する行為
+
+      - course-8-iii 講座受講規約 第8条(iii): 当研究室の信用を損なう行為
+
+      - course-10-ip 講座受講規約 第10条: 特許権、商標権、著作権その他の知的財産権を侵害する行為。講座コンテンツのリバースエンジニアリングを禁止する
+
+      - course-10-compete 講座受講規約 第10条: 当研究室のサービスで得た情報を競合他社に提供する行為。講座コンテンツを自社サービスでの広告、宣伝、転売に利用する行為'
+    expected_is_violation: 0
+    expected_violating_article: ''
+    length: 中文(50-200)
+    intent: 悪意なし(無知・うっかり)
+    degree: ''
+    noise: 丁寧
+  assert:
+  - type: javascript
+    metric: Detection
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isCorrect = output_isViolation === context.vars.expected_is_violation;\nreturn\
+      \ {\n  pass: isCorrect,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Detection\
+      \ - Expected: ${context.vars.expected_is_violation}, Got: ${output_isViolation}`\n\
+      };"
+  - type: javascript
+    metric: Article
+    value: "const expectedIsViolation = context.vars.expected_is_violation;\nconst\
+      \ expectedArticle = context.vars.expected_violating_article || '';\nconst gotArticle\
+      \ = output.article_id || '';\nlet isCorrect = false;\nlet reason = '';\nif (expectedIsViolation)\
+      \ {\n  isCorrect = String(expectedArticle) === String(gotArticle);\n  reason\
+      \ = isCorrect ? 'Match' : `Expected: ${expectedArticle}, Got: ${gotArticle}`;\n\
+      } else {\n  isCorrect = true;\n  reason = 'Ignored (Non-violation case)';\n\
+      }\nreturn {\n  pass: true,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Article\
+      \ Check - ${reason}`\n};"
+  - type: javascript
+    metric: confidence
+    weight: 0
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isViolationCorrect = output_isViolation === context.vars.expected_is_violation;\n\
+      const confidence = output.confidence ?? 0;\nconst degree = context.vars.degree;\n\
+      let score, reason;\nif (isViolationCorrect) {\n  score = degree === '明確な違反'\n\
+      \    ? (confidence >= 0.8 ? 1.0 : confidence >= 0.6 ? 0.7 : 0.3)\n    : (confidence\
+      \ >= 0.5 ? 1.0 : 0.5);\n  reason = `correct, confidence=${confidence} (${degree})`;\n\
+      } else {\n  score = Math.max(0, 1.0 - confidence);\n  reason = `wrong prediction,\
+      \ confidence=${confidence} (overconfidence penalty)`;\n}\nreturn { pass: true,\
+      \ score, reason };"
+- description: '[非違反] 条文:なし / 短文(15-50) / 悪意なし(無知・うっかり) / '
+  vars:
+    text: 質問なのですが第3回講座の録画は後日共有される予定でしょうか。
+    articles_text: '- 11-i AI Community参加規約 第11条(i): 法令または公序良俗に違反する行為
+
+      - 11-ii AI Community参加規約 第11条(ii): 犯罪行為に関連する行為
+
+      - 11-iii AI Community参加規約 第11条(iii): 当研究室、他のユーザー、または第三者のサーバーまたはネットワークの機能を破壊したり、妨害したりする行為
+
+      - 11-iv AI Community参加規約 第11条(iv): slack上でのやり取りやスクリーンショットを、SNS上にアップするといった行為
+
+      - 11-v AI Community参加規約 第11条(v): ネットワークビジネス、宗教等の勧誘行為
+
+      - 11-vi AI Community参加規約 第11条(vi): 講義の録画を無断で共有する行為
+
+      - 11-vii AI Community参加規約 第11条(vii): 当研究室のサービスの運営を妨害するおそれのある行為
+
+      - 11-viii AI Community参加規約 第11条(viii): 不正アクセスをし、またはこれを試みる行為
+
+      - 11-ix AI Community参加規約 第11条(ix): 他のユーザーに関する個人情報等を収集または蓄積する行為
+
+      - 11-x AI Community参加規約 第11条(x): 不正な目的を持って本サービスを利用する行為
+
+      - 11-xi AI Community参加規約 第11条(xi): 本サービスの他のユーザーまたはその他の第三者に不利益、損害、不快感を与える行為
+
+      - 11-xii AI Community参加規約 第11条(xii): 他のユーザーに成りすます行為
+
+      - 11-xiii AI Community参加規約 第11条(xiii): 当研究室が許諾しない本サービス上での宣伝、広告、勧誘、または営業行為
+
+      - 11-xiv AI Community参加規約 第11条(xiv): 面識のない異性との出会いを目的とした行為
+
+      - 11-xv AI Community参加規約 第11条(xv): 当研究室のサービスに関連して、反社会的勢力に対して直接または間接に利益を供与する行為
+
+      - 11-xvi AI Community参加規約 第11条(xvi): その他、当研究室が不適切と判断する行為
+
+      - edu-6 教育コンテンツ利用規約 第6条: 本教育コンテンツを第三者への提供・譲渡・貸与・公開・複製・頒布・翻案等をしてはなりません
+
+      - edu-8-iii 教育コンテンツ利用規約 第8条(iii): 本教育コンテンツを営利目的で使用する行為
+
+      - course-6 講座受講規約 第6条: ユーザーは、講座の録画・スクリーンショットを無断で行い、第三者に共有してはなりません
+
+      - course-8-ii 講座受講規約 第8条(ii): 講座内容の第三者への無断提供
+
+      - course-8-iv 講座受講規約 第8条(iv): 不正な手段による受講
+
+      - reg-3 講座受講用アカウント登録規約 第3条: アカウント情報を第三者に利用させ、または譲渡・貸与してはなりません
+
+      - community-4 AI Community参加規約 第4条: コミュニティ上でのコミュニケーションにおいて、敬意・礼節を持って接すること。ハラスメント、威圧的言動、差別的発言を行ってはならない
+
+      - community-5 AI Community参加規約 第5条: 投稿・発信した内容について、第三者の権利を侵害してはならない。投稿内容の正確性について責任を持つこと
+
+      - community-8 AI Community参加規約 第8条: 本サービスに関する著作権、知的所有権その他一切の権利は当研究室に帰属する。無断での複製・転載・改変を禁止する
+
+      - edu-3-ii 教育コンテンツ利用規約 第3条(ii): 教育コンテンツの転載・SNS・ネットワーク・サービス等へのアップロード行為
+
+      - edu-3-iii 教育コンテンツ利用規約 第3条(iii): 教育コンテンツの改変・翻案行為
+
+      - course-8-i 講座受講規約 第8条(i): 講座受講に関連して法令に違反する行為
+
+      - course-8-iii 講座受講規約 第8条(iii): 当研究室の信用を損なう行為
+
+      - course-10-ip 講座受講規約 第10条: 特許権、商標権、著作権その他の知的財産権を侵害する行為。講座コンテンツのリバースエンジニアリングを禁止する
+
+      - course-10-compete 講座受講規約 第10条: 当研究室のサービスで得た情報を競合他社に提供する行為。講座コンテンツを自社サービスでの広告、宣伝、転売に利用する行為'
+    expected_is_violation: 0
+    expected_violating_article: ''
+    length: 短文(15-50)
+    intent: 悪意なし(無知・うっかり)
+    degree: ''
+    noise: 誤字脱字あり
+  assert:
+  - type: javascript
+    metric: Detection
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isCorrect = output_isViolation === context.vars.expected_is_violation;\nreturn\
+      \ {\n  pass: isCorrect,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Detection\
+      \ - Expected: ${context.vars.expected_is_violation}, Got: ${output_isViolation}`\n\
+      };"
+  - type: javascript
+    metric: Article
+    value: "const expectedIsViolation = context.vars.expected_is_violation;\nconst\
+      \ expectedArticle = context.vars.expected_violating_article || '';\nconst gotArticle\
+      \ = output.article_id || '';\nlet isCorrect = false;\nlet reason = '';\nif (expectedIsViolation)\
+      \ {\n  isCorrect = String(expectedArticle) === String(gotArticle);\n  reason\
+      \ = isCorrect ? 'Match' : `Expected: ${expectedArticle}, Got: ${gotArticle}`;\n\
+      } else {\n  isCorrect = true;\n  reason = 'Ignored (Non-violation case)';\n\
+      }\nreturn {\n  pass: true,\n  score: isCorrect ? 1.0 : 0.0,\n  reason: `Article\
+      \ Check - ${reason}`\n};"
+  - type: javascript
+    metric: confidence
+    weight: 0
+    value: "const output_isViolation = output.violation_score >= 51 ? 1 : 0;\nconst\
+      \ isViolationCorrect = output_isViolation === context.vars.expected_is_violation;\n\
+      const confidence = output.confidence ?? 0;\nconst degree = context.vars.degree;\n\
+      let score, reason;\nif (isViolationCorrect) {\n  score = degree === '明確な違反'\n\
+      \    ? (confidence >= 0.8 ? 1.0 : confidence >= 0.6 ? 0.7 : 0.3)\n    : (confidence\
+      \ >= 0.5 ? 1.0 : 0.5);\n  reason = `correct, confidence=${confidence} (${degree})`;\n\
+      } else {\n  score = Math.max(0, 1.0 - confidence);\n  reason = `wrong prediction,\
+      \ confidence=${confidence} (overconfidence penalty)`;\n}\nreturn { pass: true,\
+      \ score, reason };"
