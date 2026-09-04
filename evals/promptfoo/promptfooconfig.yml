@@ -2,8 +2,18 @@ description: slack inspection - step3 LLM judge eval
 
 providers:
   - id: openai:chat:gpt-4o-mini
+    label: gpt-4o-mini
     config:
       temperature: 0
+      response_format: file://../../lambda/app_inspect/services/data/prompts/judge_violation.response_format.json
+
+  # gpt-5.6-luna は reasoning モデルのため temperature 非対応（渡すと 400 Bad Request）。
+  # 代わりに reasoning_effort で挙動を制御する。既存の gpt-4o-mini と公平に比較するため
+  # デフォルト値の "medium" を明示指定。
+  - id: openai:chat:gpt-5.6-luna
+    label: gpt-5.6-luna
+    config:
+      reasoning_effort: medium
       response_format: file://../../lambda/app_inspect/services/data/prompts/judge_violation.response_format.json
 
 prompts:

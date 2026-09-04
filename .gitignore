@@ -20,3 +20,7 @@ cdk.out/
 evals/promptfoo/datasets/*
 !evals/promptfoo/datasets/sample_testcases.csv
 !evals/promptfoo/datasets/testcases_preview.yaml
+
+# Notion からエクスポートした生データ（受講者の実投稿を含む機微データ）
+/violation_data.json
+/articles.json
