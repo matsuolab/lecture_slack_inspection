@@ -4,6 +4,8 @@
 ## 前提
 - pip install pyyaml
 - datasets/ ディレクトリは .gitignore に追加済み（Git 管理対象外）
+- 条文の凡例（articles_text の元データ）は本番の
+  lambda/common/data/articles.json をそのまま参照する（CSV での別管理は廃止）
 
 ## CSV の準備
 Google Sheets などで作成した CSV を手動で datasets/ に配置する。
@@ -42,6 +44,7 @@ CSV の列定義:
 
 import argparse
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -50,14 +53,23 @@ import yaml
 
 OUTPUT_DIR = Path(__file__).parent / "datasets"
 DEFAULT_OUTPUT = OUTPUT_DIR / "testcases.yaml"
-LEGEND_CSV = Path(__file__).parent / "datasets/violating_article_legend.csv"
+ARTICLES_JSON = (
+    Path(__file__).parents[2] / "lambda" / "common" / "data" / "articles.json"
+)
 
 
-def load_articles_text(legend_csv_path: Path) -> str:
-    """violating_article_legend.csv を読み込み、プロンプト用のテキストに変換する。"""
-    with open(legend_csv_path, encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        lines = [f"- {row['violating_article']}: {row['meaning']}" for row in reader]
+def load_articles_text(articles_json_path: Path) -> str:
+    """本番の articles.json を読み込み、プロンプト用のテキストに変換する。
+
+    violation_detector.py の _judge_by_llm と同じフォーマットに揃える
+    （eval と本番で articles_text の見え方がズレないようにするため）。
+    """
+    with open(articles_json_path, encoding="utf-8") as f:
+        data = json.load(f)
+    lines = [
+        f"- {a['id']} {a.get('article', '')}: {a.get('content', '')}"
+        for a in data["articles"]
+    ]
     return "\n".join(lines)
 
 
@@ -89,11 +101,11 @@ def csv_to_promptfoo_yaml(csv_path: str, output_path: Path, limit: int | None = 
         print(f"ERROR: CSV に必須列が不足しています: {missing}")
         sys.exit(1)
 
-    legend_csv_path = LEGEND_CSV.resolve()
-    if not legend_csv_path.exists():
-        print(f"ERROR: violating_article_legend.csv が見つかりません: {legend_csv_path}")
+    articles_json_path = ARTICLES_JSON.resolve()
+    if not articles_json_path.exists():
+        print(f"ERROR: articles.json が見つかりません: {articles_json_path}")
         sys.exit(1)
-    articles_text = load_articles_text(legend_csv_path)
+    articles_text = load_articles_text(articles_json_path)
 
     testcases = []
     for i, row in enumerate(rows, start=2):  # start=2: ヘッダー行を除いた行番号

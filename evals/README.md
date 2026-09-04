@@ -15,10 +15,14 @@ evals/
     ├── testcases.yml         # サンプルテストケース（6件）
     ├── load_dataset.py       # CSV → YAML 変換スクリプト
     └── datasets/
-        ├── violating_article_legend.csv   # 条文ID → 条文テキスト の対応表
-        ├── testcases_preview.yaml         # 先頭5件のプレビュー（Git 管理対象）
-        └── testcases.yaml                 # 全件データセット（Git 管理対象外）
+        ├── sample_testcases.csv    # 動作確認用の仮データ（Git 管理対象）
+        ├── testcases_preview.yaml  # sample_testcases.csv から生成したプレビュー（Git 管理対象）
+        └── testcases.yaml          # 実データ（Google Drive 等で別管理）から生成する全件データセット（Git 管理対象外）
 ```
+
+条文の凡例（`articles_text` の元データ）は `lambda/common/data/articles.json`（本番の条文マスタ）をそのまま参照します。CSV での別管理はしていません。
+
+実際の評価に使うテストケース（`text` / `is_violation` などの行データ）は守秘義務の関係上 Git 管理せず、Google Drive 等で別途配布する CSV を各自 `datasets/` に配置して使う想定です。`sample_testcases.csv` はリポジトリ内で動作確認するための仮データです。
 
 ---
 
@@ -136,13 +140,28 @@ Google Sheets でデータセットを作成し、CSV でエクスポートし�
 |---|---|---|
 | `text` | 検査対象テキスト | `連絡先は090-1234-5678です。` |
 | `is_violation` | 正解の違反判定 | `true` / `false` |
-| `violating_article` | 違反している条文 ID | `12.8` |
+| `violating_article` | 違反している条文 ID（`lambda/common/data/articles.json` の `id` に対応） | `11-ix` |
 | `length` | 投稿の長さカテゴリ | `短文(15-50)` |
 | `intent` | 投稿者の意図 | `悪意なし(無知・うっかり)` |
 | `degree` | 違反の深刻度 | `境界事例` |
 | `noise` | ノイズの種類 | `丁寧` |
 
-### 変換コマンド
+`articles_text`（条文の凡例）は CSV の列ではなく、`lambda/common/data/articles.json` から自動生成されます。
+
+### 動作確認（仮データで試す）
+
+実データを用意していなくても、リポジトリ同梱の `datasets/sample_testcases.csv` で動作確認できます。
+
+```bash
+cd evals/promptfoo
+source ../.venv/bin/activate
+
+python load_dataset.py datasets/sample_testcases.csv --output datasets/testcases_preview.yaml
+```
+
+### 変換コマンド（実データ）
+
+実データは守秘義務の関係で Git 管理せず、Google Drive 等で配布された CSV を各自 `datasets/` に配置して使います。
 
 ```bash
 # evals/ 直下で .venv を有効化してから実行
