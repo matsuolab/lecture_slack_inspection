@@ -5,15 +5,19 @@ providers:
     label: gpt-4o-mini
     config:
       temperature: 0
+      seed: 42
       response_format: file://../../lambda/app_inspect/services/data/prompts/judge_violation.response_format.json
 
   # gpt-5.6-luna は reasoning モデルのため temperature 非対応（渡すと 400 Bad Request）。
   # 代わりに reasoning_effort で挙動を制御する。既存の gpt-4o-mini と公平に比較するため
   # デフォルト値の "medium" を明示指定。
+  # seed は決定性を高めるベストエフォートの指定であり、reasoning モデルの
+  # 内部揺らぎ自体を無くすものではない（詳細は再現性検証の項を参照）。
   - id: openai:chat:gpt-5.6-luna
     label: gpt-5.6-luna
     config:
       reasoning_effort: medium
+      seed: 42
       response_format: file://../../lambda/app_inspect/services/data/prompts/judge_violation.response_format.json
 
 prompts:

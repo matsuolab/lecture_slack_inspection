@@ -14,11 +14,14 @@ evals/
     ├── promptfooconfig.yml       # 評価設定（プロバイダー・プロンプト・テストケース参照）
     ├── load_dataset.py           # CSV → YAML 変換スクリプト
     ├── convert_notion_export.py  # Notion 違反DB + 条文マスターDB の生JSON → CSV 変換スクリプト
+    ├── select_gray_zone.py       # eval結果からグレーゾーンのテストケースを抽出（再現性検証の前段）
+    ├── analyze_stability.py      # --repeat 実行結果からスコアのブレを集計（再現性検証）
     └── datasets/
         ├── sample_testcases.csv    # 動作確認用の仮データ（Git 管理対象）
         ├── testcases_preview.yaml  # sample_testcases.csv から生成したプレビュー（Git 管理対象）
         ├── real_testcases.csv      # Notion 実データから変換した CSV（Git 管理対象外）
-        └── testcases.yaml          # 評価対象データセット（Git 管理対象外、都度 load_dataset.py で生成）
+        ├── testcases.yaml          # 評価対象データセット（Git 管理対象外、都度 load_dataset.py で生成）
+        └── gray_zone_testcases.yaml # select_gray_zone.py の出力（Git 管理対象外）
 ```
 
 > `evals/promptfoo/testcases.yml`（ルート直下、1件のみ）は初期セットアップ当時の名残で、現在の `promptfooconfig.yml` からは参照されておらず、条文ID体系・レスポンス形式（`is_violation` フィールド）も現行仕様と食い違っているため参考にしないこと。
@@ -247,3 +250,46 @@ python convert_notion_export.py \
   ```
 
   動作確認用データセットに戻す場合は元の行に書き戻してください。両方を毎回のコマンドで切り替えたくない場合は、`tests:` に両方の YAML をリストで並べても構いません（`promptfooconfig.yml` の `tests:` は複数ファイルを指定できます）。
+
+---
+
+## 再現性（安定性）検証
+
+LLM は同じ入力に対して常に同じ出力を返すとは限りません。特に `gpt-5.6-luna` のような reasoning モデルは、`temperature` が使えず内部の推論過程自体に揺らぎがあるため、`gpt-4o-mini`（`temperature: 0`）より出力がブレやすい傾向があります。
+
+`violation_score` が閾値（51）付近でブレると `Detection` の pass/fail が反転するため、1回の eval だけでモデルの優劣を断定するのは危険です。特にブレの実害が大きいのは、スコアがグレーゾーン（21〜60点、境界寄りの判定）に落ちたケースなので、そこだけを対象に複数回実行してブレを検証します。
+
+### 手順
+
+```bash
+cd evals/promptfoo
+source ../.venv/bin/activate
+
+# 1. 通常どおり1回 eval を実行し、結果を JSON エクスポートしておく
+npx promptfoo eval --output results.json
+
+# 2. グレーゾーン（既定 21-60 点）に落ちたテストケースだけを抽出する
+python select_gray_zone.py --results results.json --output datasets/gray_zone_testcases.yaml
+
+# 3. promptfooconfig.yml の tests: を datasets/gray_zone_testcases.yaml に切り替えてから、
+#    --repeat N 回で繰り返し実行する（N=5 程度を推奨。件数が絞られているのでコストは抑えられる）
+npx promptfoo eval --repeat 5 --output repeat_results.json
+
+# 4. ブレを集計する
+python analyze_stability.py --results repeat_results.json
+```
+
+### 出力の読み方
+
+`analyze_stability.py` はテストケース × provider ごとに以下を出力します。
+
+| 列 | 意味 |
+|---|---|
+| `mean` / `stdev` | N 回の `violation_score` の平均・標準偏差。stdev が大きいほどスコアが安定していない |
+| `min` / `max` | N 回中の最小・最大スコア |
+| `disagree` | N 回の多数決（pass/fail）と異なる結果が出た回数 |
+| `boundary?` | N 回のうちに pass/fail が反転したケースなら `YES`（実害があるブレ） |
+
+サマリー行では provider ごとに「pass/fail が反転したケースの割合」と「平均標準偏差」が出ます。`gpt-4o-mini`（`temperature: 0`）でもブレるテストケースがある場合は、モデル側の非決定性というより、プロンプトの判定基準自体がそのケースを一意に判定しづらい設計になっている疑いがあります。
+
+`seed`（`promptfooconfig.yml` の各 provider に設定済み）は決定性を高めるベストエフォートの指定であり、ブレを完全には無くしません。特に reasoning モデルはこの検証を定期的に行うことを推奨します。
