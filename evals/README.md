@@ -218,14 +218,32 @@ python convert_notion_export.py \
   --articles /path/to/articles.json \
   --output datasets/real_testcases.csv
 
-# load_dataset.py で promptfoo 用 YAML に変換
-python load_dataset.py datasets/real_testcases.csv --output datasets/testcases.yaml
+# load_dataset.py で promptfoo 用 YAML に変換（uv で pyyaml を都度導入する場合）
+uv run --with pyyaml python load_dataset.py datasets/real_testcases.csv --output datasets/testcases.yaml
 ```
 
 `--articles` に渡すのは条文マスターDB（`条文ID` / `規約` 等のプロパティを持つ Notion エクスポート）で、`lambda/common/data/articles.json`（本番の条文マスタ、`articles_text` の生成に使う別ファイル）とは異なるので注意してください。
+
+`--violations` / `--articles` のパスにファイルが無い場合、`--fetch` を付けると Notion API から直接取得して保存できます（`.env` に `NOTION_API`（Notion Integration Token）の設定が必要）。
+
+```bash
+python convert_notion_export.py \
+  --violations /path/to/violation_data.json \
+  --articles /path/to/articles.json \
+  --output datasets/real_testcases.csv \
+  --fetch
+```
 
 ### 注意点
 
 - `violation_data.json` / `articles.json` などの Notion 生エクスポートは受講者の実投稿を含む機微データです。リポジトリのルートに置く場合は `.gitignore` で除外済みですが、それでもファイルの取り扱い（共有範囲・保存場所）には注意してください。
 - 変換後の `intent` / `noise` 列は Notion 側に対応データがないため常に空欄になります。この 2 軸で分析したい場合は変換後に手動で値を埋めてください。
-- `real_testcases.csv` から `testcases.yaml` を生成したら、`promptfooconfig.yml` の `tests:` の参照先を切り替えてから `npx promptfoo eval` を実行してください（既定は動作確認用の `datasets/testcases_preview.yaml`）。
+- `real_testcases.csv` から `testcases.yaml` を生成しただけでは評価対象になりません。`promptfooconfig.yml` の `tests:` は既定で動作確認用の `datasets/testcases_preview.yaml` を指しているため、実データを評価する直前に手動で参照先を書き換えてください。
+
+  ```diff
+   tests:
+  -  - file://datasets/testcases_preview.yaml
+  +  - file://datasets/testcases.yaml
+  ```
+
+  動作確認用データセットに戻す場合は元の行に書き戻してください。両方を毎回のコマンドで切り替えたくない場合は、`tests:` に両方の YAML をリストで並べても構いません（`promptfooconfig.yml` の `tests:` は複数ファイルを指定できます）。

@@ -26,21 +26,40 @@ load_dataset.py が読み込める CSV 形式に変換するスクリプト。
   出力先は .gitignore 済みの datasets/ 配下にすること。
 
 ## 使い方
+    # ローカルにある Notion エクスポート JSON を変換するだけの場合
     python convert_notion_export.py \
         --violations ../../violation_data.json \
         --articles ../../articles.json \
         --output datasets/real_testcases.csv
+
+    # 上記パスにファイルが無ければ Notion API から取得してから変換する場合
+    # （.env に NOTION_API を設定しておくこと）
+    python convert_notion_export.py \
+        --violations ../../violation_data.json \
+        --articles ../../articles.json \
+        --output datasets/real_testcases.csv \
+        --fetch
 """
 
 import argparse
 import csv
 import json
+import os
 import sys
+import time
 from pathlib import Path
+
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 TRUE_VIOLATION_STATUSES = {"対応終了", "期限超過"}
 FALSE_VIOLATION_STATUSES = {"対応不要"}
 # 未対応 は正解ラベルが未確定のため、デフォルトでは変換対象から除外する。
+
+ARTICLE_DB_ID = "35ecfa7cece781d9986cf8a0bd26654e"
+VIOLATION_DB_ID = "35ecfa7cece78175bf84dd0316533bb1"
 
 SEVERITY_TO_DEGREE = {
     "high": "明確な違反",
@@ -158,6 +177,45 @@ def convert(
         )
 
 
+def get_notion_db(database_id: str, output_path: Path) -> None:
+    """Notion DB を全件取得して output_path に保存する（一度実施すれば十分）。"""
+    notion_api_key = os.getenv("NOTION_API")
+    if not notion_api_key:
+        print("ERROR: 環境変数 NOTION_API が設定されていません（.env に設定してください）。")
+        sys.exit(1)
+
+    headers = {
+        "Notion-Version": "2022-06-28",
+        "Authorization": f"Bearer {notion_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    url = f"https://api.notion.com/v1/databases/{database_id}/query"
+    all_results = []
+    has_more = True
+    next_cursor = None
+    while has_more:
+        payload = {"page_size": 100}
+        if next_cursor:
+            payload["start_cursor"] = next_cursor
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+
+        data = response.json()
+        results = data.get("results", [])
+        all_results.extend(results)
+
+        has_more = data.get("has_more", False)
+        next_cursor = data.get("next_cursor")
+
+        time.sleep(0.3)
+
+    output_data = {"object": "list", "results": all_results}
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(output_data, f, ensure_ascii=False, indent=2)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Notion 違反DB + 条文マスターDB の生 JSON を評価用 CSV に変換する"
@@ -182,10 +240,21 @@ def main() -> None:
         action="store_true",
         help="対応ステータス=未対応（正解ラベル未確定）のレコードも is_violation=true として含める",
     )
+    parser.add_argument(
+        "--fetch",
+        action="store_true",
+        help="--violations / --articles のパスにファイルが無い場合、Notion API から取得して保存する（要 NOTION_API 環境変数）",
+    )
     args = parser.parse_args()
 
     violations_path = Path(args.violations)
     articles_path = Path(args.articles)
+
+    if args.fetch:
+        if not articles_path.exists():
+            get_notion_db(ARTICLE_DB_ID, articles_path)
+        if not violations_path.exists():
+            get_notion_db(VIOLATION_DB_ID, violations_path)
 
     if not violations_path.exists():
         print(f"ERROR: ファイルが見つかりません: {violations_path}")
