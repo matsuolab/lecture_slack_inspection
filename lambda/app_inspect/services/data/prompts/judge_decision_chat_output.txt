@@ -1,0 +1,6 @@
+
+## 出力
+JSON だけを出力する。decision を最初に書く。
+- decision: "warn" または "safe"
+- candidates: この投稿が警告の対象だとしたら当てはまりそうな条文 ID を、当てはまる順に 3 つ (safe でも 3 つ挙げる)
+- reason: 判断の決め手を 1 文で
