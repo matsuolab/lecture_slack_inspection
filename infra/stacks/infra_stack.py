@@ -140,6 +140,15 @@ class InfraStack(Stack):
             description="OpenAI model name for content moderation.",
         )
 
+        detection_mode = CfnParameter(
+            self,
+            "DetectionMode",
+            type="String",
+            default="llm_score",
+            allowed_values=["llm_score", "decisions", "luna"],
+            description="Violation detection mode (llm_score or decisions).",
+        )
+
         min_severity_to_alert = CfnParameter(
             self,
             "MinSeverityToAlert",
@@ -195,6 +204,7 @@ class InfraStack(Stack):
                 "NOTION_HEALTH_DB_ID": notion_health_db_id.value_as_string,
                 "NOTION_WS_LIST_DB_ID": notion_ws_list_db_id.value_as_string,
                 "OPENAI_MODEL": openai_model.value_as_string,
+                "DETECTION_MODE": detection_mode.value_as_string,
                 "MIN_SEVERITY_TO_ALERT": min_severity_to_alert.value_as_string,
                 "USE_MOCK_OPENAI": "false",
             },
@@ -319,6 +329,7 @@ class InfraStack(Stack):
                 "NOTION_API_KEY_PARAM_NAME": notion_api_key_param_name.value_as_string,
                 "NOTION_DB_ID": notion_db_id.value_as_string,
                 "NOTION_ARTICLES_DB_ID": notion_articles_db_id.value_as_string,
+                "DETECTION_MODE": detection_mode.value_as_string,
                 "USE_MOCK_OPENAI": "false",
                 "BATCH_MAX_MESSAGES_PER_INVOKE": "2000",
                 "BATCH_SLEEP_MS": "100",
