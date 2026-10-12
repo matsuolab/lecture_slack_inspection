@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Slack post compliance inspection bot for the UTokyo Matsuo Lab DX Project. Five AWS Lambda functions (Python 3.12, Docker images) deployed via AWS CDK. Slack events trigger `app_inspect`, which passes the post plus the full rule set to an LLM judge; `app_alert` handles admin approval/dismiss buttons; `app_remind` and `app_batch` run on schedules.
+Slack post compliance inspection bot for the UTokyo Matsuo Lab DX Project. Six AWS Lambda functions (Python 3.12, Docker images) deployed via AWS CDK. Slack events trigger `app_inspect`, which passes the post plus the full rule set to an LLM judge; `app_alert` handles admin approval/dismiss buttons; `app_remind` runs on a schedule; `app_batch` (past-message bulk scan) is invoked manually; `app_admin` maintains the OAuth team allowlist.
 
 ## Commands
 
 **Tests (from `lecture_slack_inspection/`):**
 ```bash
-pip install -r lambda/requirements.txt
+pip install -r requirements.txt                    # root requirements include pytest/pytest-mock/jsonschema (same as CI, Python 3.13)
 pytest tests/                                      # all tests
 pytest tests/unit/test_app_inspect.py              # single test file
 pytest tests/unit/test_app_inspect.py::test_name   # single test
@@ -23,6 +23,8 @@ cdk synth
 cdk deploy
 cdk diff
 ```
+
+`infra/tests/` is out of date (it still expects 2 Lambdas and the old SSM parameter names) and fails; CI does not run it — `cdk-synth.yml` runs `cdk synth` instead. Production deploys go through the manual `deploy.yml` workflow (`workflow_dispatch`).
 
 **Prompt evaluation (from `lecture_slack_inspection/evals/`):**
 ```bash
@@ -38,9 +40,10 @@ npx promptfoo eval
 |---|---|---|
 | `app_inspect` | `POST /slack/events` | `app_inspect.handler.lambda_handler` |
 | `app_alert` | `POST /slack/interactions` | `app_alert.handler.lambda_handler` |
-| `app_remind` | EventBridge schedule | `app_remind.handler.lambda_handler` |
-| `app_batch` | EventBridge schedule | `app_batch.handler.lambda_handler` |
+| `app_remind` | EventBridge schedule (`RemindScheduleMinutes`) | `app_remind.handler.lambda_handler` |
+| `app_batch` | Manual `aws lambda invoke` (e.g. from CloudShell) | `app_batch.handler.lambda_handler` |
 | `app_oauth` | `GET /slack/oauth/*` | `app_oauth.handler.lambda_handler` |
+| `app_admin` | `POST /admin/oauth-allowlist` (IAM / SigV4 auth) | `app_admin.handler.lambda_handler` |
 
 All functions share a single Dockerfile (`lambda/Dockerfile`) but each image excludes the other apps' directories at CDK build time (see `infra/stacks/infra_stack.py`).
 
@@ -64,7 +67,7 @@ Posts by users whose Slack `real_name` contains `松尾研` are skipped (staff a
 
 Two config sources, distinguished in `services/config.py`:
 - **Secrets** (signing secret, OpenAI key, Notion key) come from AWS SSM Parameter Store via `common/secret_manager.py`, read by name (env var `FOO_PARAM_NAME` holds the SSM parameter path); values are cached in-process.
-- **Plain env vars** (set by CDK in `infra_stack.py`): `OPENAI_MODEL`, `NOTION_DB_ID`, `NOTION_ARTICLES_DB_ID` (条文マスタ), `NOTION_WS_LIST_DB_ID` (workspace list), `NOTION_TEMPLATE_DB_ID`, `MIN_SEVERITY_TO_ALERT`, `USE_MOCK_OPENAI`.
+- **Plain env vars** (set by CDK in `infra_stack.py`): `OPENAI_MODEL`, `NOTION_DB_ID`, `NOTION_ARTICLES_DB_ID` (条文マスタ), `NOTION_WS_LIST_DB_ID` (workspace list), `NOTION_TEMPLATE_DB_ID` (warning-message templates, `common/template_manager.py`), `NOTION_HEALTH_DB_ID` (per-Lambda run status, `common/health.py`), `MIN_SEVERITY_TO_ALERT`, `USE_MOCK_OPENAI`.
 
 Per-workspace tokens are read at request time from `SLACK_INSTALLATION_PARAM_PREFIX/<team_id>/bot_token` and `.../<team_id>/alert_channel_id` — `load_config(team_id)` requires both or raises. The OpenAI model is **not** hardcoded; it comes from `OPENAI_MODEL`.
 
@@ -74,7 +77,7 @@ Per-workspace tokens are read at request time from `SLACK_INSTALLATION_PARAM_PRE
 
 Violation-record key properties: `Message_TS` (dedup key), `対応ステータス` (status lifecycle), `通知チャンネルID`/`通知メッセージTS` (admin Slack thread back-reference for edit-flow replies).
 
-Status lifecycle: `未対応` → `警告済み` → `期限超過` → `再警告済み` → `対応終了` (or `Dismissed`).
+Status lifecycle: `未対応` → `警告済み` → `期限超過` → `再警告済み` → `対応終了` (or `対応不要` when an admin dismisses it).
 
 ### Test setup
 
@@ -90,5 +93,5 @@ Status lifecycle: `未対応` → `警告済み` → `期限超過` → `再警�
 - `lambda/common/secret_manager.py` — SSM Parameter Store access with in-process cache
 - `lambda/common/observability.py` — structured logging and CloudWatch metrics
 - `lambda/app_inspect/services/data/prompts/judge_violation.txt` — LLM judge prompt (edit to tune detection)
-- `contracts/specs/notion_db_schema.md` — authoritative Notion DB schema reference
+- `docs/notion_db_schema.md` — authoritative Notion DB schema reference
 - `infra/stacks/infra_stack.py` — all CDK resources (API GW, Lambdas, IAM, EventBridge)
