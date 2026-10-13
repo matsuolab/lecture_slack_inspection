@@ -1,5 +1,4 @@
 import json
-import logging
 from unittest.mock import MagicMock
 import pytest
 import requests
@@ -19,6 +18,24 @@ def tmp_articles_file(tmp_path):
     articles_data = {
         "articles": [
             {
+                "id": "course-8-iv",
+                "article": "受講規約第8条(iv)",
+                "content": "講義資料等の無断転載・複製",
+                "category": "知的財産",
+            },
+            {
+                "id": "edu-3-ii",
+                "article": "受講生心得第3条(ii)",
+                "content": "他者への嫌がらせ行為",
+                "category": "迷惑行為",
+            },
+            {
+                "id": "course-10-ip",
+                "article": "受講規約第10条(ip)",
+                "content": "不正なソフトウェア利用",
+                "category": "不正利用",
+            },
+            {
                 "id": "11-v",
                 "article": "第11条(v)",
                 "content": "宗教・マルチ商法等の勧誘行為",
@@ -36,6 +53,12 @@ def tmp_articles_file(tmp_path):
                 "content": "その他不適切な行為",
                 "category": "不適切行為",
             },
+            {
+                "id": "reg-3",
+                "article": "共通規程第3条",
+                "content": "アカウントの不正貸与",
+                "category": "不正アクセス",
+            },
         ]
     }
     file_path = tmp_path / "test_articles.json"
@@ -50,20 +73,99 @@ def mock_openai_client():
     return client
 
 
-# 1. 既定 (llm_score) は requests.post を呼ばず既存経路
-def test_default_mode_uses_llm_score(mocker, tmp_articles_file, mock_openai_client, monkeypatch):
-    monkeypatch.delenv("DETECTION_MODE", raising=False)
-    mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
-    mock_openai_client.chat.completions.create.return_value = MagicMock(
+def _make_decisions_response(p_warn: float, article_probs: list[tuple[str, float]]) -> MagicMock:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "answers": [
+            {
+                "name": "verdict",
+                "type": "choice",
+                "probabilities": [
+                    {"value": "warn", "probability": p_warn},
+                    {"value": "safe", "probability": round(1.0 - p_warn, 4)},
+                ],
+            },
+            {
+                "name": "article",
+                "type": "choice",
+                "probabilities": [
+                    {"value": aid, "probability": prob} for aid, prob in article_probs
+                ],
+            },
+        ]
+    }
+    return mock_resp
+
+
+def _make_chat_response(content: dict | str) -> MagicMock:
+    if isinstance(content, dict):
+        content_str = json.dumps(content, ensure_ascii=False)
+    else:
+        content_str = content
+    return MagicMock(
         choices=[
             MagicMock(
-                message=MagicMock(
-                    content=json.dumps(
-                        {"violation_score": 60, "confidence": 0.8, "article_id": "11-v", "reason": "違反"}
-                    )
-                )
+                message=MagicMock(content=content_str)
             )
         ]
+    )
+
+
+# モード決定テスト (既定・auto・大文字や空白・明示・未知の値・引数と環境変数の優先を1つに集約)
+@pytest.mark.parametrize(
+    "env_mode,arg_mode,judge_model,expected_mode",
+    [
+        # 既定 (未設定)
+        (None, None, "gpt-4o-mini", "llm_score"),
+        (None, None, "gpt-6-luna", "decisions"),
+        (None, None, " GPT-4o-mini-2024-07-18 ", "llm_score"),
+        # auto
+        ("auto", None, "gpt-6-luna", "decisions"),
+        ("auto", None, "gpt-4o-mini", "llm_score"),
+        # 大文字や空白
+        (" DECISIONS ", None, "gpt-6-luna", "decisions"),
+        (None, " LUNA ", "gpt-4o-mini", "luna"),
+        # 明示
+        (None, "decisions", "gpt-6-luna", "decisions"),
+        (None, "luna", "gpt-4o-mini", "luna"),
+        (None, "llm_score", "gpt-6-luna", "llm_score"),
+        ("decisions", None, "gpt-4o-mini", "decisions"),
+        # 未知の値 (autoへフォールバック)
+        (None, "unknown_mode", "gpt-6-luna", "decisions"),
+        ("invalid_env_mode", None, "gpt-6-luna", "decisions"),
+        (None, "foo", "gpt-6-luna", "decisions"),
+        (None, "foo", "gpt-4o-mini", "llm_score"),
+        # 引数と環境変数の優先 (引数優先)
+        ("decisions", "luna", "gpt-6-luna", "luna"),
+        ("luna", "llm_score", "gpt-4o-mini", "llm_score"),
+    ],
+)
+def test_detection_mode_resolution(
+    tmp_articles_file, mock_openai_client, monkeypatch, env_mode, arg_mode, judge_model, expected_mode
+):
+    if env_mode is not None:
+        monkeypatch.setenv("DETECTION_MODE", env_mode)
+    else:
+        monkeypatch.delenv("DETECTION_MODE", raising=False)
+
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model=judge_model,
+        articles_path=tmp_articles_file,
+        detection_mode=arg_mode,
+    )
+    assert detector.detection_mode == expected_mode
+
+
+# llm_score 経路: temperature を渡さないことの確認
+def test_llm_score_mode_does_not_pass_temperature(
+    mocker, tmp_articles_file, mock_openai_client, monkeypatch
+):
+    monkeypatch.setenv("DETECTION_MODE", "llm_score")
+    mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
+    mock_openai_client.chat.completions.create.return_value = _make_chat_response(
+        {"violation_score": 60, "confidence": 0.8, "article_id": "11-v", "reason": "違反"}
     )
 
     detector = ViolationDetector(
@@ -77,54 +179,49 @@ def test_default_mode_uses_llm_score(mocker, tmp_articles_file, mock_openai_clie
     mock_openai_client.chat.completions.create.assert_called_once()
     call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
     assert call_kwargs["model"] == "gpt-4o-mini"
-    assert call_kwargs["temperature"] == 0
+    assert "temperature" not in call_kwargs
     assert result.is_violation is True
     assert result.method == "LLM"
     assert result.article_id == "11-v"
+    assert result.category == "勧誘行為"
     assert result.reason.startswith("[11-v 第11条(v)]")
 
 
-# 2. decisions: warn p=0.9、article の確率が 11-xiii 0.6 / 11-v 0.3 / 11-xvi 0.1
-#    → 2 段目に 3 候補が確率順で渡り、2 段目の答え (例: 11-v) が article_id になる。
-#    method "Decisions"、confidence 0.9、candidates の順序
+# llm_score 経路: 例外のときは送り直さず LLM判定エラー
+def test_llm_score_mode_exception_does_not_retry_and_returns_error(
+    mocker, tmp_articles_file, mock_openai_client, monkeypatch
+):
+    monkeypatch.setenv("DETECTION_MODE", "llm_score")
+    mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
+    mock_openai_client.chat.completions.create.side_effect = RuntimeError("API failure")
+
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-4o-mini",
+        articles_path=tmp_articles_file,
+    )
+    result = detector.detect("テスト投稿")
+
+    mock_post.assert_not_called()
+    mock_openai_client.chat.completions.create.assert_called_once()
+    assert result.is_violation is False
+    assert result.confidence == 0.0
+    assert result.article_id is None
+    assert result.category is None
+    assert result.method == "LLM"
+    assert result.reason.startswith("LLM判定エラー: API failure")
+
+
+# decisions: warn p=0.9、article の確率が 11-xiii 0.6 / 11-v 0.3 / 11-xvi 0.1
 def test_decisions_mode_warn_stage2_choice(mocker, tmp_articles_file, mock_openai_client, monkeypatch):
     monkeypatch.setenv("DETECTION_MODE", "decisions")
     mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "answers": [
-            {
-                "name": "verdict",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "warn", "probability": 0.9},
-                    {"value": "safe", "probability": 0.1},
-                ],
-            },
-            {
-                "name": "article",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "11-xiii", "probability": 0.6},
-                    {"value": "11-v", "probability": 0.3},
-                    {"value": "11-xvi", "probability": 0.1},
-                ],
-            },
-        ]
-    }
-    mock_post.return_value = mock_resp
+    mock_post.return_value = _make_decisions_response(
+        0.9, [("11-xiii", 0.6), ("11-v", 0.3), ("11-xvi", 0.1)]
+    )
 
-    mock_openai_client.chat.completions.create.return_value = MagicMock(
-        choices=[
-            MagicMock(
-                message=MagicMock(
-                    content=json.dumps(
-                        {"article_id": "11-v", "reason": "宗教勧誘に該当"}
-                    )
-                )
-            )
-        ]
+    mock_openai_client.chat.completions.create.return_value = _make_chat_response(
+        {"article_id": "11-v", "reason": "宗教勧誘に該当"}
     )
 
     detector = ViolationDetector(
@@ -154,33 +251,15 @@ def test_decisions_mode_warn_stage2_choice(mocker, tmp_articles_file, mock_opena
     assert "- 11-xvi 第11条(xvi) [不適切行為]: その他不適切な行為" in stage2_prompt
 
 
-# 3. decisions: article の choices に none が無い。verdict の instructions は前回と同じ組み立て
+# decisions: article の choices に none が無い。verdict の instructions の組み立て
 def test_decisions_request_payload_choices_and_instructions(
     mocker, tmp_articles_file, mock_openai_client, monkeypatch
 ):
     monkeypatch.setenv("DETECTION_MODE", "decisions")
     mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "answers": [
-            {
-                "name": "verdict",
-                "type": "choice",
-                "probabilities": [{"value": "safe", "probability": 0.8}, {"value": "warn", "probability": 0.2}],
-            },
-            {
-                "name": "article",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "11-v", "probability": 0.5},
-                    {"value": "11-xiii", "probability": 0.3},
-                    {"value": "11-xvi", "probability": 0.2},
-                ],
-            },
-        ]
-    }
-    mock_post.return_value = mock_resp
+    mock_post.return_value = _make_decisions_response(
+        0.2, [("11-v", 0.5), ("11-xiii", 0.3), ("11-xvi", 0.2)]
+    )
 
     detector = ViolationDetector(
         openai_client=mock_openai_client,
@@ -216,37 +295,24 @@ def test_decisions_request_payload_choices_and_instructions(
 
     choice_values = [c["value"] for c in article_q["choices"]]
     assert "none" not in choice_values
-    assert choice_values == ["11-v", "11-xiii", "11-xvi"]
+    assert choice_values == [
+        "course-8-iv",
+        "edu-3-ii",
+        "course-10-ip",
+        "11-v",
+        "11-xiii",
+        "11-xvi",
+        "reg-3",
+    ]
 
 
-# 4. decisions: safe (p=0.2) → 2 段目を呼ばない、article_id None
+# decisions: safe (p=0.2) → 2 段目を呼ばない、article_id None
 def test_decisions_mode_safe_no_stage2(mocker, tmp_articles_file, mock_openai_client, monkeypatch):
     monkeypatch.setenv("DETECTION_MODE", "decisions")
     mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "answers": [
-            {
-                "name": "verdict",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "warn", "probability": 0.2},
-                    {"value": "safe", "probability": 0.8},
-                ],
-            },
-            {
-                "name": "article",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "11-v", "probability": 0.4},
-                    {"value": "11-xiii", "probability": 0.3},
-                    {"value": "11-xvi", "probability": 0.3},
-                ],
-            },
-        ]
-    }
-    mock_post.return_value = mock_resp
+    mock_post.return_value = _make_decisions_response(
+        0.2, [("11-v", 0.4), ("11-xiii", 0.3), ("11-xvi", 0.3)]
+    )
 
     detector = ViolationDetector(
         openai_client=mock_openai_client,
@@ -263,34 +329,13 @@ def test_decisions_mode_safe_no_stage2(mocker, tmp_articles_file, mock_openai_cl
     assert "Decisions API: P(warn)=0.20" in result.reason
 
 
-# 5. decisions: 2 段目が例外 → 候補の 1 位が article_id、reason に P(warn)=0.90
+# decisions: 2 段目が例外 → 候補の 1 位が article_id、reason に P(warn)=0.90
 def test_decisions_mode_stage2_exception_fallback(mocker, tmp_articles_file, mock_openai_client, monkeypatch):
     monkeypatch.setenv("DETECTION_MODE", "decisions")
     mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "answers": [
-            {
-                "name": "verdict",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "warn", "probability": 0.9},
-                    {"value": "safe", "probability": 0.1},
-                ],
-            },
-            {
-                "name": "article",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "11-xiii", "probability": 0.6},
-                    {"value": "11-v", "probability": 0.3},
-                    {"value": "11-xvi", "probability": 0.1},
-                ],
-            },
-        ]
-    }
-    mock_post.return_value = mock_resp
+    mock_post.return_value = _make_decisions_response(
+        0.9, [("11-xiii", 0.6), ("11-v", 0.3), ("11-xvi", 0.1)]
+    )
 
     mock_openai_client.chat.completions.create.side_effect = RuntimeError("Stage 2 failure")
 
@@ -309,7 +354,7 @@ def test_decisions_mode_stage2_exception_fallback(mocker, tmp_articles_file, moc
     assert "[11-xiii 第11条(xiii)] Decisions API: P(warn)=0.90" in result.reason
 
 
-# 6. decisions: Decisions API が例外 → 経路 B に切り替わる (method "LLM-fallback")
+# decisions: Decisions API が例外 → 経路 B に切り替わる (method "LLM-fallback")
 def test_decisions_mode_api_exception_triggers_fallback(
     mocker, tmp_articles_file, mock_openai_client, monkeypatch
 ):
@@ -320,27 +365,11 @@ def test_decisions_mode_api_exception_triggers_fallback(
     )
 
     mock_openai_client.chat.completions.create.side_effect = [
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"decision": "warn", "candidates": ["11-v", "11-xiii", "11-xvi"], "reason": "外部勧誘の疑い"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"decision": "warn", "candidates": ["11-v", "11-xiii", "11-xvi"], "reason": "外部勧誘の疑い"}
         ),
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"article_id": "11-xiii", "reason": "外部グループ告知"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"article_id": "11-xiii", "reason": "外部グループ告知"}
         ),
     ]
 
@@ -359,34 +388,18 @@ def test_decisions_mode_api_exception_triggers_fallback(
     assert "[11-xiii 第11条(xiii)] [luna] 外部グループ告知" in result.reason
 
 
-# 7. luna: requests.post を呼ばない。1 段目の prompt に投稿本文と article_guide の文面と出力指定が入り、
-#    (input の投稿) が残っていない。warn → 2 段目 → method "Luna"、reason が [luna] を含む
+# luna: requests.post を呼ばない。1 段目の prompt に投稿本文と article_guide の文面と出力指定が入り、
+# (input の投稿) が残っていない。warn → 2 段目 → method "Luna"、reason が [luna] を含む
 def test_luna_mode_warn_pipeline(mocker, tmp_articles_file, mock_openai_client, monkeypatch):
     monkeypatch.setenv("DETECTION_MODE", "luna")
     mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
 
     mock_openai_client.chat.completions.create.side_effect = [
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"decision": "warn", "candidates": ["11-v", "11-xiii"], "reason": "勧誘疑い"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"decision": "warn", "candidates": ["11-v", "11-xiii"], "reason": "勧誘疑い"}
         ),
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"article_id": "11-v", "reason": "マルチ勧誘行為"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"article_id": "11-v", "reason": "マルチ勧誘行為"}
         ),
     ]
 
@@ -417,33 +430,17 @@ def test_luna_mode_warn_pipeline(mocker, tmp_articles_file, mock_openai_client, 
     assert "[11-v 第11条(v)] [luna] マルチ勧誘行為" in result.reason
 
 
-# 8. luna: 候補に条文一覧に無い ID や重複がある → 除かれる。全部無効なら 11-xvi
+# luna: 候補に条文一覧に無い ID や重複がある → 除かれる。全部無効なら 11-xvi
 def test_luna_mode_candidate_sanitization(mocker, tmp_articles_file, mock_openai_client, monkeypatch):
     monkeypatch.setenv("DETECTION_MODE", "luna")
     mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
 
     mock_openai_client.chat.completions.create.side_effect = [
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"decision": "warn", "candidates": ["unknown-1", "11-v", "11-v", "11-xiii"], "reason": "テスト"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"decision": "warn", "candidates": ["unknown-1", "11-v", "11-v", "11-xiii"], "reason": "テスト"}
         ),
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"article_id": "11-v", "reason": "理由"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"article_id": "11-v", "reason": "理由"}
         ),
     ]
 
@@ -462,27 +459,11 @@ def test_luna_mode_candidate_sanitization(mocker, tmp_articles_file, mock_openai
     # 全部無効な候補の場合 → 11-xvi にフォールバック
     mock_openai_client.chat.completions.create.reset_mock()
     mock_openai_client.chat.completions.create.side_effect = [
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"decision": "warn", "candidates": ["invalid-1", "invalid-2"], "reason": "テスト2"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"decision": "warn", "candidates": ["invalid-1", "invalid-2"], "reason": "テスト2"}
         ),
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"article_id": "11-xvi", "reason": "不適切行為"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"article_id": "11-xvi", "reason": "不適切行為"}
         ),
     ]
 
@@ -493,7 +474,7 @@ def test_luna_mode_candidate_sanitization(mocker, tmp_articles_file, mock_openai
     assert result2.article_id == "11-xvi"
 
 
-# 9. luna: 1 段目が例外 → is_violation False、reason が "LLM判定エラー" で始まる
+# luna: 1 段目が例外 → is_violation False、reason が "LLM判定エラー" で始まる
 def test_luna_mode_stage1_exception_returns_error_result(
     mocker, tmp_articles_file, mock_openai_client, monkeypatch
 ):
@@ -514,33 +495,17 @@ def test_luna_mode_stage1_exception_returns_error_result(
     assert result.reason.startswith("LLM判定エラー: Stage 1 LLM failure")
 
 
-# 10. 2 段目の prompt で、投稿本文に {{article_guide}} という文字列があっても展開されない
+# 2 段目の prompt で、投稿本文に {{article_guide}} という文字列があっても展開されない
 def test_stage2_prompt_preserves_template_variable_in_text(
     mocker, tmp_articles_file, mock_openai_client, monkeypatch
 ):
     monkeypatch.setenv("DETECTION_MODE", "luna")
     mock_openai_client.chat.completions.create.side_effect = [
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"decision": "warn", "candidates": ["11-v"], "reason": "疑い"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"decision": "warn", "candidates": ["11-v"], "reason": "疑い"}
         ),
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"article_id": "11-v", "reason": "違反理由"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"article_id": "11-v", "reason": "違反理由"}
         ),
     ]
 
@@ -557,197 +522,15 @@ def test_stage2_prompt_preserves_template_variable_in_text(
     assert text_with_template_tag in prompt2
 
 
-# 境界値・モード設定テスト
-def test_detection_mode_argument_and_unknown_mode(tmp_articles_file, mock_openai_client, monkeypatch):
-    monkeypatch.delenv("DETECTION_MODE", raising=False)
-
-    detector_decisions = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-6-luna",
-        articles_path=tmp_articles_file,
-        detection_mode="decisions",
-    )
-    assert detector_decisions.detection_mode == "decisions"
-
-    detector_luna = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-6-luna",
-        articles_path=tmp_articles_file,
-        detection_mode="luna",
-    )
-    assert detector_luna.detection_mode == "luna"
-
-    detector_unknown = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-6-luna",
-        articles_path=tmp_articles_file,
-        detection_mode="unknown_mode",
-    )
-    assert detector_unknown.detection_mode == "decisions"
-
-    monkeypatch.setenv("DETECTION_MODE", "invalid_env_mode")
-    detector_env = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-6-luna",
-        articles_path=tmp_articles_file,
-    )
-    assert detector_env.detection_mode == "decisions"
-
-
-# (1) 未設定 + gpt-4o-mini → llm_score
-def test_detection_mode_auto_default_gpt_4o_mini(tmp_articles_file, mock_openai_client, monkeypatch):
-    monkeypatch.delenv("DETECTION_MODE", raising=False)
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-4o-mini",
-        articles_path=tmp_articles_file,
-    )
-    assert detector.detection_mode == "llm_score"
-
-
-# (2) 未設定 + gpt-6-luna → decisions
-def test_detection_mode_auto_default_gpt_6_luna(tmp_articles_file, mock_openai_client, monkeypatch, caplog):
-    monkeypatch.delenv("DETECTION_MODE", raising=False)
-    with caplog.at_level(logging.INFO):
-        detector = ViolationDetector(
-            openai_client=mock_openai_client,
-            judge_model="gpt-6-luna",
-            articles_path=tmp_articles_file,
-        )
-    assert detector.detection_mode == "decisions"
-    assert "detection_mode=decisions (auto, judge_model=gpt-6-luna)" in caplog.text
-
-
-# (3) 未設定 + " GPT-4o-mini-2024-07-18 " → llm_score
-def test_detection_mode_auto_with_model_whitespace_and_case(tmp_articles_file, mock_openai_client, monkeypatch):
-    monkeypatch.delenv("DETECTION_MODE", raising=False)
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model=" GPT-4o-mini-2024-07-18 ",
-        articles_path=tmp_articles_file,
-    )
-    assert detector.detection_mode == "llm_score"
-
-
-# (4) DETECTION_MODE=auto + gpt-6-luna → decisions
-def test_detection_mode_env_auto_gpt_6_luna(tmp_articles_file, mock_openai_client, monkeypatch):
-    monkeypatch.setenv("DETECTION_MODE", "auto")
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-6-luna",
-        articles_path=tmp_articles_file,
-    )
-    assert detector.detection_mode == "decisions"
-
-
-# (5) 明示の luna + gpt-4o-mini → luna
-def test_detection_mode_explicit_luna_with_gpt_4o_mini(tmp_articles_file, mock_openai_client, monkeypatch):
-    monkeypatch.delenv("DETECTION_MODE", raising=False)
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-4o-mini",
-        articles_path=tmp_articles_file,
-        detection_mode="luna",
-    )
-    assert detector.detection_mode == "luna"
-
-
-# (6) 明示の llm_score + gpt-6-luna → llm_score
-def test_detection_mode_explicit_llm_score_with_gpt_6_luna(tmp_articles_file, mock_openai_client, monkeypatch):
-    monkeypatch.delenv("DETECTION_MODE", raising=False)
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-6-luna",
-        articles_path=tmp_articles_file,
-        detection_mode="llm_score",
-    )
-    assert detector.detection_mode == "llm_score"
-
-
-# (7) 未知の値 "foo" + gpt-6-luna → decisions、+ gpt-4o-mini → llm_score
-def test_detection_mode_unknown_value_foo_falls_back_to_auto(tmp_articles_file, mock_openai_client, monkeypatch, caplog):
-    monkeypatch.delenv("DETECTION_MODE", raising=False)
-    with caplog.at_level(logging.WARNING):
-        detector_luna = ViolationDetector(
-            openai_client=mock_openai_client,
-            judge_model="gpt-6-luna",
-            articles_path=tmp_articles_file,
-            detection_mode="foo",
-        )
-    assert detector_luna.detection_mode == "decisions"
-    assert "Unknown detection mode 'foo', falling back to 'auto'" in caplog.text
-
-    caplog.clear()
-    with caplog.at_level(logging.WARNING):
-        detector_mini = ViolationDetector(
-            openai_client=mock_openai_client,
-            judge_model="gpt-4o-mini",
-            articles_path=tmp_articles_file,
-            detection_mode="foo",
-        )
-    assert detector_mini.detection_mode == "llm_score"
-    assert "Unknown detection mode 'foo', falling back to 'auto'" in caplog.text
-
-
-# (8) 引数の指定が環境変数より優先される
-def test_detection_mode_argument_precedence_over_env(tmp_articles_file, mock_openai_client, monkeypatch):
-    monkeypatch.setenv("DETECTION_MODE", "decisions")
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-6-luna",
-        articles_path=tmp_articles_file,
-        detection_mode="luna",
-    )
-    assert detector.detection_mode == "luna"
-
-    monkeypatch.setenv("DETECTION_MODE", "luna")
-    detector2 = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-4o-mini",
-        articles_path=tmp_articles_file,
-        detection_mode="llm_score",
-    )
-    assert detector2.detection_mode == "llm_score"
-
-
 def test_decisions_mode_boundary_threshold(mocker, tmp_articles_file, mock_openai_client, monkeypatch):
     monkeypatch.setenv("DETECTION_MODE", "decisions")
     mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "answers": [
-            {
-                "name": "verdict",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "warn", "probability": 0.5},
-                    {"value": "safe", "probability": 0.5},
-                ],
-            },
-            {
-                "name": "article",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "11-v", "probability": 0.5},
-                    {"value": "11-xiii", "probability": 0.3},
-                    {"value": "11-xvi", "probability": 0.2},
-                ],
-            },
-        ]
-    }
-    mock_post.return_value = mock_resp
+    mock_post.return_value = _make_decisions_response(
+        0.5, [("11-v", 0.5), ("11-xiii", 0.3), ("11-xvi", 0.2)]
+    )
 
-    mock_openai_client.chat.completions.create.return_value = MagicMock(
-        choices=[
-            MagicMock(
-                message=MagicMock(
-                    content=json.dumps(
-                        {"article_id": "11-v", "reason": "境界値"}
-                    )
-                )
-            )
-        ]
+    mock_openai_client.chat.completions.create.return_value = _make_chat_response(
+        {"article_id": "11-v", "reason": "境界値"}
     )
 
     detector = ViolationDetector(
@@ -764,16 +547,8 @@ def test_decisions_mode_boundary_threshold(mocker, tmp_articles_file, mock_opena
 
 def test_luna_mode_safe_no_stage2(mocker, tmp_articles_file, mock_openai_client, monkeypatch):
     monkeypatch.setenv("DETECTION_MODE", "luna")
-    mock_openai_client.chat.completions.create.return_value = MagicMock(
-        choices=[
-            MagicMock(
-                message=MagicMock(
-                    content=json.dumps(
-                        {"decision": "safe", "candidates": ["11-v", "11-xiii", "11-xvi"], "reason": "安全な挨拶"}
-                    )
-                )
-            )
-        ]
+    mock_openai_client.chat.completions.create.return_value = _make_chat_response(
+        {"decision": "safe", "candidates": ["11-v", "11-xiii", "11-xvi"], "reason": "安全な挨拶"}
     )
 
     detector = ViolationDetector(
@@ -794,16 +569,8 @@ def test_luna_mode_safe_no_stage2(mocker, tmp_articles_file, mock_openai_client,
 def test_luna_mode_stage2_exception_fallback(mocker, tmp_articles_file, mock_openai_client, monkeypatch):
     monkeypatch.setenv("DETECTION_MODE", "luna")
     mock_openai_client.chat.completions.create.side_effect = [
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"decision": "warn", "candidates": ["11-xiii", "11-v"], "reason": "外部宣伝の疑い"}
-                        )
-                    )
-                )
-            ]
+        _make_chat_response(
+            {"decision": "warn", "candidates": ["11-xiii", "11-v"], "reason": "外部宣伝の疑い"}
         ),
         RuntimeError("Stage 2 failure"),
     ]
@@ -823,158 +590,7 @@ def test_luna_mode_stage2_exception_fallback(mocker, tmp_articles_file, mock_ope
     assert "[11-xiii 第11条(xiii)] [luna] 外部宣伝の疑い" in result.reason
 
 
-# llm_score モードでの temperature フォールバックテスト
-def test_llm_score_mode_success_with_temperature_zero(tmp_articles_file, mock_openai_client, monkeypatch):
-    monkeypatch.setenv("DETECTION_MODE", "llm_score")
-    mock_openai_client.chat.completions.create.return_value = MagicMock(
-        choices=[
-            MagicMock(
-                message=MagicMock(
-                    content=json.dumps(
-                        {"violation_score": 60, "confidence": 0.8, "article_id": "11-v", "reason": "違反"}
-                    )
-                )
-            )
-        ]
-    )
-
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-4o-mini",
-        articles_path=tmp_articles_file,
-    )
-    result = detector.detect("テスト投稿")
-
-    assert mock_openai_client.chat.completions.create.call_count == 1
-    call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
-    assert call_kwargs["temperature"] == 0
-    assert call_kwargs["model"] == "gpt-4o-mini"
-    assert result.is_violation is True
-
-
-def test_llm_score_mode_retries_without_temperature_when_unsupported(
-    tmp_articles_file, mock_openai_client, monkeypatch
-):
-    monkeypatch.setenv("DETECTION_MODE", "llm_score")
-    mock_openai_client.chat.completions.create.side_effect = [
-        Exception(
-            "Unsupported value: 'temperature' does not support 0 with this model. Only the default (1) value is supported."
-        ),
-        MagicMock(
-            choices=[
-                MagicMock(
-                    message=MagicMock(
-                        content=json.dumps(
-                            {"violation_score": 80, "confidence": 0.9, "article_id": "11-v", "reason": "違反"}
-                        )
-                    )
-                )
-            ]
-        ),
-    ]
-
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-6-luna",
-        articles_path=tmp_articles_file,
-    )
-    result = detector.detect("テスト投稿")
-
-    assert mock_openai_client.chat.completions.create.call_count == 2
-    call1_kwargs = mock_openai_client.chat.completions.create.call_args_list[0].kwargs
-    call2_kwargs = mock_openai_client.chat.completions.create.call_args_list[1].kwargs
-
-    assert call1_kwargs["temperature"] == 0
-    assert "temperature" not in call2_kwargs
-    assert call2_kwargs["model"] == call1_kwargs["model"]
-    assert call2_kwargs["messages"] == call1_kwargs["messages"]
-    assert call2_kwargs["response_format"] == call1_kwargs["response_format"]
-    assert result.is_violation is True
-
-
-def test_llm_score_mode_unrelated_exception_does_not_retry(
-    tmp_articles_file, mock_openai_client, monkeypatch
-):
-    monkeypatch.setenv("DETECTION_MODE", "llm_score")
-    mock_openai_client.chat.completions.create.side_effect = Exception("rate limit")
-
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-4o-mini",
-        articles_path=tmp_articles_file,
-    )
-    result = detector.detect("テスト投稿")
-
-    assert mock_openai_client.chat.completions.create.call_count == 1
-    assert result.is_violation is False
-    assert result.reason.startswith("LLM判定エラー")
-
-
-def test_llm_score_mode_temperature_exception_and_retry_also_fails(
-    tmp_articles_file, mock_openai_client, monkeypatch
-):
-    monkeypatch.setenv("DETECTION_MODE", "llm_score")
-    mock_openai_client.chat.completions.create.side_effect = [
-        Exception(
-            "Unsupported value: 'temperature' does not support 0 with this model. Only the default (1) value is supported."
-        ),
-        Exception("server error"),
-    ]
-
-    detector = ViolationDetector(
-        openai_client=mock_openai_client,
-        judge_model="gpt-6-luna",
-        articles_path=tmp_articles_file,
-    )
-    result = detector.detect("テスト投稿")
-
-    assert mock_openai_client.chat.completions.create.call_count == 2
-    assert result.is_violation is False
-    assert result.reason.startswith("LLM判定エラー")
-
-
-@pytest.fixture
-def adversarial_articles_file(tmp_path):
-    articles_data = {
-        "articles": [
-            {
-                "id": "course-8-iv",
-                "article": "受講規約第8条(iv)",
-                "content": "講義資料等の無断転載・複製",
-                "category": "知的財産",
-            },
-            {
-                "id": "edu-3-ii",
-                "article": "受講生心得第3条(ii)",
-                "content": "他者への嫌がらせ行為",
-                "category": "迷惑行為",
-            },
-            {
-                "id": "course-10-ip",
-                "article": "受講規約第10条(ip)",
-                "content": "不正なソフトウェア利用",
-                "category": "不正利用",
-            },
-            {
-                "id": "11-xiii",
-                "article": "第11条(xiii)",
-                "content": "外部コミュニティへの勧誘や宣伝広告",
-                "category": "宣伝・勧誘",
-            },
-            {
-                "id": "reg-3",
-                "article": "共通規程第3条",
-                "content": "アカウントの不正貸与",
-                "category": "不正アクセス",
-            },
-        ]
-    }
-    file_path = tmp_path / "adversarial_articles.json"
-    file_path.write_text(json.dumps(articles_data, ensure_ascii=False), encoding="utf-8")
-    return str(file_path)
-
-
-# 1. _render_template に \d・\1・\g<0>・\n (2 文字) を含む値を入れても例外にならず、値がそのまま入る
+# _render_template に \d・\1・\g<0>・\n (2 文字) を含む値を入れても例外にならず、値がそのまま入る
 def test_render_template_with_escape_sequences():
     template = "Header\n{{body}}\nFooter"
     special_text = r"Pattern \d+ group \1 ref \g<0> newline \n literal"
@@ -982,27 +598,19 @@ def test_render_template_with_escape_sequences():
     assert result == f"Header\n{special_text}\nFooter"
 
 
-# 2. llm_score の経路で、本文に \d を含む投稿でも chat.completions.create が呼ばれ、prompt に本文がそのまま入る
+# llm_score の経路で、本文に \d を含む投稿でも chat.completions.create が呼ばれ、prompt に本文がそのまま入る
 def test_llm_score_mode_with_special_escape_in_post(
-    adversarial_articles_file, mock_openai_client, monkeypatch
+    tmp_articles_file, mock_openai_client, monkeypatch
 ):
     monkeypatch.setenv("DETECTION_MODE", "llm_score")
-    mock_openai_client.chat.completions.create.return_value = MagicMock(
-        choices=[
-            MagicMock(
-                message=MagicMock(
-                    content=json.dumps(
-                        {"violation_score": 10, "confidence": 0.8, "article_id": None, "reason": "問題なし"}
-                    )
-                )
-            )
-        ]
+    mock_openai_client.chat.completions.create.return_value = _make_chat_response(
+        {"violation_score": 10, "confidence": 0.8, "article_id": None, "reason": "問題なし"}
     )
 
     detector = ViolationDetector(
         openai_client=mock_openai_client,
         judge_model="gpt-4o-mini",
-        articles_path=adversarial_articles_file,
+        articles_path=tmp_articles_file,
     )
     post_text = r"正規表現の \d+ について質問です。"
     result = detector.detect(post_text)
@@ -1014,12 +622,12 @@ def test_llm_score_mode_with_special_escape_in_post(
     assert result.is_violation is False
 
 
-# 3. _normalize_article_id: course-8-iv・edu-3-ii・course-10-ip・11-xiii・reg-3 はそのまま。" course-8-iv " (空白付き) も course-8-iv。"course-8-iv 講座受講規約" のような形からも course-8-iv。条文のタイトルを渡すと ID に戻る。None・空文字は None
-def test_normalize_article_id_all_patterns(adversarial_articles_file, mock_openai_client):
+# _normalize_article_id: course-8-iv・edu-3-ii・course-10-ip・11-xiii・reg-3 はそのまま。" course-8-iv " (空白付き) も course-8-iv。"course-8-iv 講座受講規約" のような形からも course-8-iv。条文のタイトルを渡すと ID に戻る。None・空文字は None
+def test_normalize_article_id_all_patterns(tmp_articles_file, mock_openai_client):
     detector = ViolationDetector(
         openai_client=mock_openai_client,
         judge_model="gpt-4o-mini",
-        articles_path=adversarial_articles_file,
+        articles_path=tmp_articles_file,
     )
 
     # course-8-iv・edu-3-ii・course-10-ip・11-xiii・reg-3 はそのまま
@@ -1048,53 +656,24 @@ def test_normalize_article_id_all_patterns(adversarial_articles_file, mock_opena
     assert detector._normalize_article_id("   ") is None
 
 
-# 4. decisions の経路で 2 段目が course-8-iv を選んだとき、detect の結果の article_id が course-8-iv で、reason の先頭に [course-8-iv <条文名>] が付く
+# decisions の経路で 2 段目が course-8-iv を選んだとき、detect の結果の article_id が course-8-iv で、reason の先頭に [course-8-iv <条文名>] が付く
 def test_decisions_mode_stage2_chooses_course_8_iv(
-    mocker, adversarial_articles_file, mock_openai_client, monkeypatch
+    mocker, tmp_articles_file, mock_openai_client, monkeypatch
 ):
     monkeypatch.setenv("DETECTION_MODE", "decisions")
     mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "answers": [
-            {
-                "name": "verdict",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "warn", "probability": 0.95},
-                    {"value": "safe", "probability": 0.05},
-                ],
-            },
-            {
-                "name": "article",
-                "type": "choice",
-                "probabilities": [
-                    {"value": "course-8-iv", "probability": 0.7},
-                    {"value": "course-10-ip", "probability": 0.2},
-                    {"value": "reg-3", "probability": 0.1},
-                ],
-            },
-        ]
-    }
-    mock_post.return_value = mock_resp
+    mock_post.return_value = _make_decisions_response(
+        0.95, [("course-8-iv", 0.7), ("course-10-ip", 0.2), ("reg-3", 0.1)]
+    )
 
-    mock_openai_client.chat.completions.create.return_value = MagicMock(
-        choices=[
-            MagicMock(
-                message=MagicMock(
-                    content=json.dumps(
-                        {"article_id": "course-8-iv", "reason": "講義資料の転載"}
-                    )
-                )
-            )
-        ]
+    mock_openai_client.chat.completions.create.return_value = _make_chat_response(
+        {"article_id": "course-8-iv", "reason": "講義資料の転載"}
     )
 
     detector = ViolationDetector(
         openai_client=mock_openai_client,
         judge_model="gpt-6-luna",
-        articles_path=adversarial_articles_file,
+        articles_path=tmp_articles_file,
     )
     result = detector.detect("テスト投稿")
 
@@ -1107,14 +686,14 @@ def test_decisions_mode_stage2_chooses_course_8_iv(
     assert "講義資料の転載" in result.reason
 
 
-# 5. _choose_article に空の候補を渡すと API を呼ばずに ValueError
+# _choose_article に空の候補を渡すと API を呼ばずに ValueError
 def test_choose_article_empty_candidates_raises_value_error(
-    adversarial_articles_file, mock_openai_client
+    tmp_articles_file, mock_openai_client
 ):
     detector = ViolationDetector(
         openai_client=mock_openai_client,
         judge_model="gpt-4o-mini",
-        articles_path=adversarial_articles_file,
+        articles_path=tmp_articles_file,
     )
     mock_openai_client.chat.completions.create.reset_mock()
 
@@ -1122,4 +701,3 @@ def test_choose_article_empty_candidates_raises_value_error(
         detector._choose_article("テスト投稿", [])
 
     mock_openai_client.chat.completions.create.assert_not_called()
-

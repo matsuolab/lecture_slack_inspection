@@ -4,6 +4,7 @@
 context が十分広いモデルを用いる前提かつ、条文数も少数 (24+α) なので、
 articles.json + extra_articles (WS ローカルルール) を全部 LLM に渡す方式に統一。
 """
+from functools import lru_cache
 import json
 import logging
 import os
@@ -26,21 +27,11 @@ _DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 _COMMON_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "common", "data")
 
 _PROMPTS_DIR = os.path.join(_DATA_DIR, "prompts")
-_JUDGE_PROMPT_PATH = os.path.join(_PROMPTS_DIR, "judge_violation.txt")
 _RESPONSE_FORMAT_PATH = os.path.join(_PROMPTS_DIR, "judge_violation.response_format.json")
-_DECISION_PROMPT_PATH = os.path.join(_PROMPTS_DIR, "judge_decision.txt")
-_ARTICLE_GUIDE_PROMPT_PATH = os.path.join(_PROMPTS_DIR, "article_guide.txt")
-_JUDGE_ARTICLE_PROMPT_PATH = os.path.join(_PROMPTS_DIR, "judge_article.txt")
-_DECISION_CHAT_OUTPUT_PROMPT_PATH = os.path.join(_PROMPTS_DIR, "judge_decision_chat_output.txt")
 
 _DECISION_TEXT_PLACEHOLDER = "(input の投稿)"
 
-_PROMPT_TEMPLATE_CACHE: Optional[str] = None
 _RESPONSE_FORMAT_CACHE: Optional[dict] = None
-_DECISION_PROMPT_CACHE: Optional[str] = None
-_ARTICLE_GUIDE_CACHE: Optional[str] = None
-_JUDGE_ARTICLE_CACHE: Optional[str] = None
-_DECISION_CHAT_OUTPUT_CACHE: Optional[str] = None
 
 _DEFAULT_JUDGE_PROMPT = """あなたはSlack投稿のガイドライン違反を判定するアシスタントです。
 
@@ -72,17 +63,12 @@ def _read_text(path: str) -> str:
         return f.read()
 
 
-def _get_prompt_template() -> str:
-    """judge prompt を初回だけロード (無ければデフォルト)"""
-    global _PROMPT_TEMPLATE_CACHE
-    if _PROMPT_TEMPLATE_CACHE is not None:
-        return _PROMPT_TEMPLATE_CACHE
-
-    if os.path.exists(_JUDGE_PROMPT_PATH):
-        _PROMPT_TEMPLATE_CACHE = _read_text(_JUDGE_PROMPT_PATH)
-    else:
-        _PROMPT_TEMPLATE_CACHE = _DEFAULT_JUDGE_PROMPT
-    return _PROMPT_TEMPLATE_CACHE
+@lru_cache
+def _load_prompt(filename: str, default: str = "") -> str:
+    path = os.path.join(_PROMPTS_DIR, filename)
+    if os.path.exists(path):
+        return _read_text(path)
+    return default
 
 
 def _get_response_format() -> dict:
@@ -99,56 +85,10 @@ def _get_response_format() -> dict:
     return _RESPONSE_FORMAT_CACHE
 
 
-def _get_decision_prompt_template() -> str:
-    """judge_decision prompt を初回だけロード (無ければ空文字)"""
-    global _DECISION_PROMPT_CACHE
-    if _DECISION_PROMPT_CACHE is not None:
-        return _DECISION_PROMPT_CACHE
-
-    if os.path.exists(_DECISION_PROMPT_PATH):
-        _DECISION_PROMPT_CACHE = _read_text(_DECISION_PROMPT_PATH)
-    else:
-        _DECISION_PROMPT_CACHE = ""
-    return _DECISION_PROMPT_CACHE
-
-
-def _get_article_guide_template() -> str:
-    """article_guide を初回だけロード (無ければ空文字)"""
-    global _ARTICLE_GUIDE_CACHE
-    if _ARTICLE_GUIDE_CACHE is not None:
-        return _ARTICLE_GUIDE_CACHE
-
-    if os.path.exists(_ARTICLE_GUIDE_PROMPT_PATH):
-        _ARTICLE_GUIDE_CACHE = _read_text(_ARTICLE_GUIDE_PROMPT_PATH)
-    else:
-        _ARTICLE_GUIDE_CACHE = ""
-    return _ARTICLE_GUIDE_CACHE
-
-
-def _get_judge_article_template() -> str:
-    """judge_article prompt を初回だけロード (無ければ空文字)"""
-    global _JUDGE_ARTICLE_CACHE
-    if _JUDGE_ARTICLE_CACHE is not None:
-        return _JUDGE_ARTICLE_CACHE
-
-    if os.path.exists(_JUDGE_ARTICLE_PROMPT_PATH):
-        _JUDGE_ARTICLE_CACHE = _read_text(_JUDGE_ARTICLE_PROMPT_PATH)
-    else:
-        _JUDGE_ARTICLE_CACHE = ""
-    return _JUDGE_ARTICLE_CACHE
-
-
-def _get_decision_chat_output_template() -> str:
-    """judge_decision_chat_output prompt を初回だけロード (無ければ空文字)"""
-    global _DECISION_CHAT_OUTPUT_CACHE
-    if _DECISION_CHAT_OUTPUT_CACHE is not None:
-        return _DECISION_CHAT_OUTPUT_CACHE
-
-    if os.path.exists(_DECISION_CHAT_OUTPUT_PROMPT_PATH):
-        _DECISION_CHAT_OUTPUT_CACHE = _read_text(_DECISION_CHAT_OUTPUT_PROMPT_PATH)
-    else:
-        _DECISION_CHAT_OUTPUT_CACHE = ""
-    return _DECISION_CHAT_OUTPUT_CACHE
+def _articles_text(articles: list) -> str:
+    return "\n".join(
+        [f"- {a['id']} {a.get('article', '')}: {a.get('content', '')}" for a in articles]
+    )
 
 
 def _render_template(template: str, **vars: str) -> str:
@@ -292,37 +232,20 @@ class ViolationDetector:
         return s
 
     def _judge_by_llm(self, text: str, articles: list) -> dict:
-        articles_text = "\n".join(
-            [f"- {a['id']} {a.get('article','')}: {a.get('content','')}" for a in articles]
-        )
+        articles_text = _articles_text(articles)
 
-        template = _get_prompt_template()
+        template = _load_prompt("judge_violation.txt", _DEFAULT_JUDGE_PROMPT)
         prompt = _render_template(template, text=text, articles_text=articles_text)
 
         messages = [{"role": "user", "content": prompt}]
         response_format = _get_response_format()
 
         try:
-            try:
-                resp = self.client.chat.completions.create(
-                    model=self.judge_model,
-                    messages=messages,
-                    response_format=response_format,
-                    temperature=0,
-                )
-            except Exception as e:
-                if "temperature" in str(e):
-                    logger.warning(
-                        "Model does not support temperature=0, retrying without temperature: %s",
-                        e,
-                    )
-                    resp = self.client.chat.completions.create(
-                        model=self.judge_model,
-                        messages=messages,
-                        response_format=response_format,
-                    )
-                else:
-                    raise
+            resp = self.client.chat.completions.create(
+                model=self.judge_model,
+                messages=messages,
+                response_format=response_format,
+            )
 
             content = (resp.choices[0].message.content or "").strip()
             r = json.loads(content) if content else {}
@@ -354,8 +277,8 @@ class ViolationDetector:
                 for c in candidates
             ]
         )
-        guide = _get_article_guide_template()
-        template = _get_judge_article_template()
+        guide = _load_prompt("article_guide.txt")
+        template = _load_prompt("judge_article.txt")
         prompt_template = _render_template(
             template, article_guide=guide, candidates_text=candidates_text
         )
@@ -391,15 +314,30 @@ class ViolationDetector:
             "reason": r.get("reason", ""),
         }
 
-    def _judge_by_decisions(self, text: str, articles: list) -> dict:
-        articles_text = "\n".join(
-            [f"- {a['id']} {a.get('article', '')}: {a.get('content', '')}" for a in articles]
-        )
+    def _pick_article(
+        self,
+        text: str,
+        candidate_ids: list[str],
+        articles: list,
+        fallback_reason: str,
+    ) -> tuple[Optional[str], str]:
+        article_by_id = {a["id"]: a for a in articles}
+        candidate_dicts = [article_by_id[cid] for cid in candidate_ids if cid in article_by_id]
+        try:
+            chosen = self._choose_article(text, candidate_dicts)
+            return chosen.get("article_id"), chosen.get("reason", "")
+        except Exception as e:
+            logger.warning("Article choice failed: %s", e)
+            fallback_id = candidate_dicts[0]["id"] if candidate_dicts else None
+            return fallback_id, fallback_reason
 
-        template = _get_decision_prompt_template()
+    def _judge_by_decisions(self, text: str, articles: list) -> dict:
+        articles_text = _articles_text(articles)
+
+        template = _load_prompt("judge_decision.txt")
         rendered_template = _render_template(template, articles_text=articles_text)
 
-        guide = _get_article_guide_template()
+        guide = _load_prompt("article_guide.txt")
         article_instructions = (
             "この投稿が警告の対象だとしたら、最も当てはまる条文を 1 つ選ぶ。\n\n"
             + guide
@@ -472,52 +410,36 @@ class ViolationDetector:
         candidate_ids = [p["value"] for p in sorted_probs if "value" in p][:TOP_K]
 
         article_by_id = {a["id"]: a for a in articles}
-        candidate_dicts = [article_by_id[cid] for cid in candidate_ids if cid in article_by_id]
-        candidate_ids = [c["id"] for c in candidate_dicts]
+        candidate_ids = [cid for cid in candidate_ids if cid in article_by_id]
 
         is_warn = (p_warn >= DECISION_WARN_THRESHOLD)
-        article_id = None
-        reason = f"Decisions API: P(warn)={p_warn:.2f}"
+        fallback_reason = f"Decisions API: P(warn)={p_warn:.2f}"
 
         if is_warn:
-            try:
-                chosen = self._choose_article(text, candidate_dicts)
-                article_id = chosen.get("article_id")
-                reason = chosen.get("reason", "")
-            except Exception as e:
-                logger.warning("Article choice failed in decisions mode: %s", e)
-                article_id = candidate_ids[0] if candidate_ids else None
-                reason = f"Decisions API: P(warn)={p_warn:.2f}"
+            article_id, reason = self._pick_article(
+                text, candidate_ids, articles, fallback_reason
+            )
         else:
             article_id = None
-
-        category = None
-        if article_id:
-            for a in articles:
-                if a.get("id") == article_id:
-                    category = a.get("category")
-                    break
+            reason = fallback_reason
 
         return {
             "is_violation": is_warn,
             "confidence": p_warn,
             "article_id": article_id,
-            "category": category,
             "reason": reason,
             "candidates": candidate_ids,
         }
 
     def _judge_by_chat_pipeline(self, text: str, articles: list) -> dict:
-        articles_text = "\n".join(
-            [f"- {a['id']} {a.get('article', '')}: {a.get('content', '')}" for a in articles]
-        )
+        articles_text = _articles_text(articles)
 
-        template = _get_decision_prompt_template()
+        template = _load_prompt("judge_decision.txt")
         part1 = _render_template(template, articles_text=articles_text).replace(
             _DECISION_TEXT_PLACEHOLDER, text
         )
-        part2 = _get_article_guide_template()
-        part3 = _get_decision_chat_output_template()
+        part2 = _load_prompt("article_guide.txt")
+        part3 = _load_prompt("judge_decision_chat_output.txt")
         prompt = part1 + part2 + part3
 
         article_ids = [a["id"] for a in articles]
@@ -575,35 +497,19 @@ class ViolationDetector:
                 else:
                     candidate_ids = []
 
-            article_by_id = {a["id"]: a for a in articles}
-            candidate_dicts = [article_by_id[cid] for cid in candidate_ids if cid in article_by_id]
-
             if is_warn:
-                try:
-                    chosen = self._choose_article(text, candidate_dicts)
-                    article_id = chosen.get("article_id")
-                    step2_reason = chosen.get("reason", "")
-                except Exception as e:
-                    logger.warning("Article choice failed in chat pipeline: %s", e)
-                    article_id = candidate_ids[0] if candidate_ids else None
-                    step2_reason = step1_reason
+                article_id, step2_reason = self._pick_article(
+                    text, candidate_ids, articles, step1_reason
+                )
                 final_reason = f"[luna] {step2_reason}"
             else:
                 article_id = None
                 final_reason = f"[luna] {step1_reason}"
 
-            category = None
-            if article_id:
-                for a in articles:
-                    if a.get("id") == article_id:
-                        category = a.get("category")
-                        break
-
             return {
                 "is_violation": is_warn,
                 "confidence": 0.8 if is_warn else 0.2,
                 "article_id": article_id,
-                "category": category,
                 "reason": final_reason,
                 "candidates": candidate_ids,
             }
