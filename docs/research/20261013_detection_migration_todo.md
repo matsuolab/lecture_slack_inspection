@@ -50,7 +50,7 @@ Lambda の環境変数は CDK のデプロイのたびに上書きされる。**
 |---|---|---|---|
 | A | Slack の 3 秒ルール: 判定を非同期にする方式を調べて決める（Slack にはすぐ 200、判定は Lambda の非同期呼び出しか SQS） | 運営が調査 | 8 月のログで判定 32 件中 30 件が Slack の再送になっていた。失敗が続くと Slack がイベント購読を止めるおそれ |
 | B | 条文の正解ラベルを付け、条文の選択を採点する（177 行） | 運営 → Claude | `slack_detection_eval/labels/article_labels.csv` → `score_articles.py` |
-| C | gpt-4o-mini の廃止後、`llm_score` の経路・`judge_violation.txt`・temperature の送り直しを削除する PR | Claude | 差分はほぼ削除だけ |
+| C | gpt-4o-mini の廃止後、`llm_score` の経路・`judge_violation.txt`・`judge_violation.response_format.json`・`DetectionMode` の `llm_score` を削除する PR | Claude | 差分はほぼ削除だけ |
 | D | 条文を Notion の条文マスタから読み込む | 要件の確認から | Notion は有効・共通 22 件、リポジトリは 31 件で 9 件足りない（community-4・edu-3-ii など） |
 | E | コードの中に直接書いた指示文をプロンプトのファイルに出す／JSON 出力の部分の改善 | 要件の確認から | |
 | F | まだ誰も見ていない新しい判断（今日以降の Notion）で評価し直す | Claude | 1〜2 週間ほど溜まってから |

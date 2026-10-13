@@ -79,7 +79,7 @@ Notion の違反 DB から全レコードを取得し、**管理者の実際の�
 知らない値が入っていたら `auto` として扱う。`OPENAI_MODEL` と方式がずれて「gpt-6-luna なのに今のプロンプトで判定する」状態は、明示的に `llm_score` を指定しない限り起きない。
 
 経路 A・B の 2 段目と経路 B の 1 段目は、`OPENAI_MODEL` のモデルを使う。`gpt-6-luna` に設定する。
-gpt-6-luna は `temperature=0` を受け付けない（既定の 1 だけ）ため、新しい経路は temperature を指定しない。
+gpt-6-luna は `temperature=0` を受け付けない（既定の 1 だけ）。そのため、どの経路も temperature を指定しない（今の方式の `temperature=0` も削除した）。
 
 ## 6. 結果
 
@@ -169,7 +169,7 @@ gpt-6-luna は `temperature=0` を受け付けない（既定の 1 だけ）た�
 3. Manual Deploy を実行し、`docs/regression_checklist.md` の 1 章（違反検知 → アラート）と 3 章（投稿の編集）を確認する。Notion の違反レコードの「検出方法」が `Decisions` になっていることも確認する。
 4. 問題があれば、`OPENAI_MODEL` を `gpt-4o-mini` に戻して再デプロイすれば元に戻る（`auto` で `llm_score` になる。gpt-4o-mini が使える間）。Decisions API だけが止まった場合は、`deploy.yml` に `--parameters DetectionMode=luna` を足して再デプロイすると、gpt-6-luna だけの経路に固定できる。
 5. `DetectionMode=llm_score` を gpt-6-luna と組み合わせないこと: `llm_score` は今のプロンプトのままなので、取りこぼしが大きく増える（開発用データで 10 → 58 件）。
-   - gpt-6-luna などは `temperature=0` を受け付けない（400 エラー）。以前はこのエラーで全投稿が黙って「違反なし」になったが、`llm_score` の経路は temperature を付けずに送り直すよう修正した
+   - 以前は `llm_score` の経路が `temperature=0` を送っていて、gpt-6-luna では 400 エラー → 全投稿が黙って「違反なし」になる組み合わせだった。temperature の指定は削除した
 
 ## 付録: 再現方法
 
