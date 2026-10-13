@@ -67,13 +67,16 @@ Notion の違反 DB から全レコードを取得し、**管理者の実際の�
 
 ### 5.3 切り替え方
 
-環境変数 `DETECTION_MODE`（CDK パラメータ `DetectionMode`）で選ぶ。
+環境変数 `DETECTION_MODE`（CDK パラメータ `DetectionMode`）で選ぶ。既定は `auto` で、普段は `OPENAI_MODEL` を変えるだけで切り替わる。
 
 | 値 | 動作 |
 |---|---|
-| `llm_score`（既定） | 今の本番と同じ |
+| `auto`（既定） | `OPENAI_MODEL` が `gpt-4o-mini` で始まれば `llm_score`、それ以外は `decisions` |
+| `llm_score` | 今の本番と同じ（緊急時に強制する用） |
 | `decisions` | 経路 A。失敗したら経路 B |
-| `luna` | 経路 B だけ（Decisions API が廃止された場合） |
+| `luna` | 経路 B だけ（Decisions API が廃止・停止した場合に強制する用） |
+
+知らない値が入っていたら `auto` として扱う。`OPENAI_MODEL` と方式がずれて「gpt-6-luna なのに今のプロンプトで判定する」状態は、明示的に `llm_score` を指定しない限り起きない。
 
 経路 A・B の 2 段目と経路 B の 1 段目は、`OPENAI_MODEL` のモデルを使う。`gpt-6-luna` に設定する。
 gpt-6-luna は `temperature=0` を受け付けない（既定の 1 だけ）ため、新しい経路は temperature を指定しない。
@@ -140,7 +143,7 @@ gpt-6-luna は `temperature=0` を受け付けない（既定の 1 だけ）た�
 | `lambda/app_inspect/services/data/prompts/judge_article.txt` | 2 段目のプロンプト |
 | `lambda/app_inspect/services/data/prompts/judge_decision_chat_output.txt` | 経路 B の出力指定 |
 | `tests/unit/test_violation_detector.py` | 経路 A・B・フォールバック・既定動作のテスト |
-| `infra/stacks/infra_stack.py` | CDK パラメータ `DetectionMode`（既定 `llm_score`）と環境変数 |
+| `infra/stacks/infra_stack.py` | CDK パラメータ `DetectionMode`（既定 `auto`）と環境変数 |
 
 確認したこと:
 - 単体テスト 107 件がすべて通る。`cdk synth` が通る。
@@ -162,10 +165,10 @@ gpt-6-luna は `temperature=0` を受け付けない（既定の 1 だけ）た�
 ## 9. デプロイの手順（運営が実行する）
 
 1. 実装を commit し、PR でレビューする。
-2. GitHub Actions の変数 `OPENAI_MODEL` を `gpt-6-luna` にする。
-3. `deploy.yml` の `cdk deploy` に `--parameters DetectionMode=decisions` を追加する。
-4. Manual Deploy を実行し、`docs/regression_checklist.md` の 1 章（違反検知 → アラート）と 3 章（投稿の編集）を確認する。
-5. 問題があれば、`OPENAI_MODEL` を `gpt-4o-mini` に戻し、`DetectionMode=llm_score` で再デプロイすれば元に戻る（gpt-4o-mini が使える間）。**`OPENAI_MODEL` を戻すのを忘れないこと**: `llm_score` は今のプロンプトのままなので、gpt-6-luna で動かすと取りこぼしが大きく増える（開発用データで 10 → 58 件）。
+2. GitHub Actions の変数 `OPENAI_MODEL` を `gpt-6-luna` にする（`DetectionMode` は既定の `auto` のままで新方式になる。`deploy.yml` の変更は不要）。
+3. Manual Deploy を実行し、`docs/regression_checklist.md` の 1 章（違反検知 → アラート）と 3 章（投稿の編集）を確認する。Notion の違反レコードの「検出方法」が `Decisions` になっていることも確認する。
+4. 問題があれば、`OPENAI_MODEL` を `gpt-4o-mini` に戻して再デプロイすれば元に戻る（`auto` で `llm_score` になる。gpt-4o-mini が使える間）。Decisions API だけが止まった場合は、`deploy.yml` に `--parameters DetectionMode=luna` を足して再デプロイすると、gpt-6-luna だけの経路に固定できる。
+5. `DetectionMode=llm_score` を gpt-6-luna と組み合わせないこと: `llm_score` は今のプロンプトのままなので、取りこぼしが大きく増える（開発用データで 10 → 58 件）。
    - gpt-6-luna などは `temperature=0` を受け付けない（400 エラー）。以前はこのエラーで全投稿が黙って「違反なし」になったが、`llm_score` の経路は temperature を付けずに送り直すよう修正した
 
 ## 付録: 再現方法
