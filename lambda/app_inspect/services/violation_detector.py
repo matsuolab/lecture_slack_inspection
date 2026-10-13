@@ -276,13 +276,31 @@ class ViolationDetector:
         template = _get_prompt_template()
         prompt = _render_template(template, text=text, articles_text=articles_text)
 
+        messages = [{"role": "user", "content": prompt}]
+        response_format = _get_response_format()
+
         try:
-            resp = self.client.chat.completions.create(
-                model=self.judge_model,
-                messages=[{"role": "user", "content": prompt}],
-                response_format=_get_response_format(),
-                temperature=0,
-            )
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.judge_model,
+                    messages=messages,
+                    response_format=response_format,
+                    temperature=0,
+                )
+            except Exception as e:
+                if "temperature" in str(e):
+                    logger.warning(
+                        "Model does not support temperature=0, retrying without temperature: %s",
+                        e,
+                    )
+                    resp = self.client.chat.completions.create(
+                        model=self.judge_model,
+                        messages=messages,
+                        response_format=response_format,
+                    )
+                else:
+                    raise
+
             content = (resp.choices[0].message.content or "").strip()
             r = json.loads(content) if content else {}
 

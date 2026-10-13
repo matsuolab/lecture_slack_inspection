@@ -703,3 +703,113 @@ def test_luna_mode_stage2_exception_fallback(mocker, tmp_articles_file, mock_ope
     assert result.article_id == "11-xiii"
     assert result.category == "宣伝・勧誘"
     assert "[11-xiii 第11条(xiii)] [luna] 外部宣伝の疑い" in result.reason
+
+
+# llm_score モードでの temperature フォールバックテスト
+def test_llm_score_mode_success_with_temperature_zero(tmp_articles_file, mock_openai_client, monkeypatch):
+    monkeypatch.setenv("DETECTION_MODE", "llm_score")
+    mock_openai_client.chat.completions.create.return_value = MagicMock(
+        choices=[
+            MagicMock(
+                message=MagicMock(
+                    content=json.dumps(
+                        {"violation_score": 60, "confidence": 0.8, "article_id": "11-v", "reason": "違反"}
+                    )
+                )
+            )
+        ]
+    )
+
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-4o-mini",
+        articles_path=tmp_articles_file,
+    )
+    result = detector.detect("テスト投稿")
+
+    assert mock_openai_client.chat.completions.create.call_count == 1
+    call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["temperature"] == 0
+    assert call_kwargs["model"] == "gpt-4o-mini"
+    assert result.is_violation is True
+
+
+def test_llm_score_mode_retries_without_temperature_when_unsupported(
+    tmp_articles_file, mock_openai_client, monkeypatch
+):
+    monkeypatch.setenv("DETECTION_MODE", "llm_score")
+    mock_openai_client.chat.completions.create.side_effect = [
+        Exception(
+            "Unsupported value: 'temperature' does not support 0 with this model. Only the default (1) value is supported."
+        ),
+        MagicMock(
+            choices=[
+                MagicMock(
+                    message=MagicMock(
+                        content=json.dumps(
+                            {"violation_score": 80, "confidence": 0.9, "article_id": "11-v", "reason": "違反"}
+                        )
+                    )
+                )
+            ]
+        ),
+    ]
+
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-6-luna",
+        articles_path=tmp_articles_file,
+    )
+    result = detector.detect("テスト投稿")
+
+    assert mock_openai_client.chat.completions.create.call_count == 2
+    call1_kwargs = mock_openai_client.chat.completions.create.call_args_list[0].kwargs
+    call2_kwargs = mock_openai_client.chat.completions.create.call_args_list[1].kwargs
+
+    assert call1_kwargs["temperature"] == 0
+    assert "temperature" not in call2_kwargs
+    assert call2_kwargs["model"] == call1_kwargs["model"]
+    assert call2_kwargs["messages"] == call1_kwargs["messages"]
+    assert call2_kwargs["response_format"] == call1_kwargs["response_format"]
+    assert result.is_violation is True
+
+
+def test_llm_score_mode_unrelated_exception_does_not_retry(
+    tmp_articles_file, mock_openai_client, monkeypatch
+):
+    monkeypatch.setenv("DETECTION_MODE", "llm_score")
+    mock_openai_client.chat.completions.create.side_effect = Exception("rate limit")
+
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-4o-mini",
+        articles_path=tmp_articles_file,
+    )
+    result = detector.detect("テスト投稿")
+
+    assert mock_openai_client.chat.completions.create.call_count == 1
+    assert result.is_violation is False
+    assert result.reason.startswith("LLM判定エラー")
+
+
+def test_llm_score_mode_temperature_exception_and_retry_also_fails(
+    tmp_articles_file, mock_openai_client, monkeypatch
+):
+    monkeypatch.setenv("DETECTION_MODE", "llm_score")
+    mock_openai_client.chat.completions.create.side_effect = [
+        Exception(
+            "Unsupported value: 'temperature' does not support 0 with this model. Only the default (1) value is supported."
+        ),
+        Exception("server error"),
+    ]
+
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-6-luna",
+        articles_path=tmp_articles_file,
+    )
+    result = detector.detect("テスト投稿")
+
+    assert mock_openai_client.chat.completions.create.call_count == 2
+    assert result.is_violation is False
+    assert result.reason.startswith("LLM判定エラー")
