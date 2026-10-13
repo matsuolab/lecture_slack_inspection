@@ -17,7 +17,7 @@ Lambda の環境変数は CDK のデプロイのたびに上書きされる。**
 
 | # | やること | 担当 | 状態 |
 |---|---|---|---|
-| 1 | `DetectionMode=auto` の実装を終え、テストと `cdk synth` を通して commit する | Claude | 作業中 |
+| 1 | `DetectionMode=auto` の実装を終え、テストと `cdk synth` を通して commit する | Claude | 済（b0e0d40） |
 | 2 | **本番の API キーで gpt-6-luna と Decisions API が使えるか確認する**。実験は手元の `.env` のキーで行ったので、SSM のキーが同じ組織・同じ権限とは限らない。Decisions API は Public Beta で「Decision API is not enabled for this user」（403）になった例が報告されている。使えないまま切り替えると、毎回 Decisions API が失敗して予備経路（gpt-6-luna）になる | 運営 | 未 |
 | 3 | `git push -u origin feat/decisions-detection` で上げ、PR を作る（main に直接 push しない） | 運営 | 未 |
 | 4 | PR のレビューとマージ。CI（pytest・cdk synth）が通ることを確認する | チーム | 未 |
