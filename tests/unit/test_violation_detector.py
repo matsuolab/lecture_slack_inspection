@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import MagicMock
 import pytest
 import requests
@@ -582,7 +583,7 @@ def test_detection_mode_argument_and_unknown_mode(tmp_articles_file, mock_openai
         articles_path=tmp_articles_file,
         detection_mode="unknown_mode",
     )
-    assert detector_unknown.detection_mode == "llm_score"
+    assert detector_unknown.detection_mode == "decisions"
 
     monkeypatch.setenv("DETECTION_MODE", "invalid_env_mode")
     detector_env = ViolationDetector(
@@ -590,7 +591,123 @@ def test_detection_mode_argument_and_unknown_mode(tmp_articles_file, mock_openai
         judge_model="gpt-6-luna",
         articles_path=tmp_articles_file,
     )
-    assert detector_env.detection_mode == "llm_score"
+    assert detector_env.detection_mode == "decisions"
+
+
+# (1) 未設定 + gpt-4o-mini → llm_score
+def test_detection_mode_auto_default_gpt_4o_mini(tmp_articles_file, mock_openai_client, monkeypatch):
+    monkeypatch.delenv("DETECTION_MODE", raising=False)
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-4o-mini",
+        articles_path=tmp_articles_file,
+    )
+    assert detector.detection_mode == "llm_score"
+
+
+# (2) 未設定 + gpt-6-luna → decisions
+def test_detection_mode_auto_default_gpt_6_luna(tmp_articles_file, mock_openai_client, monkeypatch, caplog):
+    monkeypatch.delenv("DETECTION_MODE", raising=False)
+    with caplog.at_level(logging.INFO):
+        detector = ViolationDetector(
+            openai_client=mock_openai_client,
+            judge_model="gpt-6-luna",
+            articles_path=tmp_articles_file,
+        )
+    assert detector.detection_mode == "decisions"
+    assert "detection_mode=decisions (auto, judge_model=gpt-6-luna)" in caplog.text
+
+
+# (3) 未設定 + " GPT-4o-mini-2024-07-18 " → llm_score
+def test_detection_mode_auto_with_model_whitespace_and_case(tmp_articles_file, mock_openai_client, monkeypatch):
+    monkeypatch.delenv("DETECTION_MODE", raising=False)
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model=" GPT-4o-mini-2024-07-18 ",
+        articles_path=tmp_articles_file,
+    )
+    assert detector.detection_mode == "llm_score"
+
+
+# (4) DETECTION_MODE=auto + gpt-6-luna → decisions
+def test_detection_mode_env_auto_gpt_6_luna(tmp_articles_file, mock_openai_client, monkeypatch):
+    monkeypatch.setenv("DETECTION_MODE", "auto")
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-6-luna",
+        articles_path=tmp_articles_file,
+    )
+    assert detector.detection_mode == "decisions"
+
+
+# (5) 明示の luna + gpt-4o-mini → luna
+def test_detection_mode_explicit_luna_with_gpt_4o_mini(tmp_articles_file, mock_openai_client, monkeypatch):
+    monkeypatch.delenv("DETECTION_MODE", raising=False)
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-4o-mini",
+        articles_path=tmp_articles_file,
+        detection_mode="luna",
+    )
+    assert detector.detection_mode == "luna"
+
+
+# (6) 明示の llm_score + gpt-6-luna → llm_score
+def test_detection_mode_explicit_llm_score_with_gpt_6_luna(tmp_articles_file, mock_openai_client, monkeypatch):
+    monkeypatch.delenv("DETECTION_MODE", raising=False)
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-6-luna",
+        articles_path=tmp_articles_file,
+        detection_mode="llm_score",
+    )
+    assert detector.detection_mode == "llm_score"
+
+
+# (7) 未知の値 "foo" + gpt-6-luna → decisions、+ gpt-4o-mini → llm_score
+def test_detection_mode_unknown_value_foo_falls_back_to_auto(tmp_articles_file, mock_openai_client, monkeypatch, caplog):
+    monkeypatch.delenv("DETECTION_MODE", raising=False)
+    with caplog.at_level(logging.WARNING):
+        detector_luna = ViolationDetector(
+            openai_client=mock_openai_client,
+            judge_model="gpt-6-luna",
+            articles_path=tmp_articles_file,
+            detection_mode="foo",
+        )
+    assert detector_luna.detection_mode == "decisions"
+    assert "Unknown detection mode 'foo', falling back to 'auto'" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        detector_mini = ViolationDetector(
+            openai_client=mock_openai_client,
+            judge_model="gpt-4o-mini",
+            articles_path=tmp_articles_file,
+            detection_mode="foo",
+        )
+    assert detector_mini.detection_mode == "llm_score"
+    assert "Unknown detection mode 'foo', falling back to 'auto'" in caplog.text
+
+
+# (8) 引数の指定が環境変数より優先される
+def test_detection_mode_argument_precedence_over_env(tmp_articles_file, mock_openai_client, monkeypatch):
+    monkeypatch.setenv("DETECTION_MODE", "decisions")
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-6-luna",
+        articles_path=tmp_articles_file,
+        detection_mode="luna",
+    )
+    assert detector.detection_mode == "luna"
+
+    monkeypatch.setenv("DETECTION_MODE", "luna")
+    detector2 = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-4o-mini",
+        articles_path=tmp_articles_file,
+        detection_mode="llm_score",
+    )
+    assert detector2.detection_mode == "llm_score"
 
 
 def test_decisions_mode_boundary_threshold(mocker, tmp_articles_file, mock_openai_client, monkeypatch):

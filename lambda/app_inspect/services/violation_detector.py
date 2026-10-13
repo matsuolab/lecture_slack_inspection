@@ -180,13 +180,28 @@ class ViolationDetector:
         self.client = openai_client
         self.judge_model = judge_model
 
-        mode = detection_mode if detection_mode is not None else os.environ.get("DETECTION_MODE")
+        mode_raw = detection_mode if detection_mode is not None else os.environ.get("DETECTION_MODE")
+        mode = mode_raw.strip().lower() if mode_raw else ""
         if not mode:
-            mode = "llm_score"
-        if mode not in ("llm_score", "decisions", "luna"):
-            logger.warning("Unknown detection mode '%s', falling back to 'llm_score'", mode)
-            mode = "llm_score"
-        self.detection_mode = mode
+            mode = "auto"
+        elif mode not in ("auto", "llm_score", "decisions", "luna"):
+            logger.warning("Unknown detection mode '%s', falling back to 'auto'", mode_raw)
+            mode = "auto"
+
+        if mode == "auto":
+            judge_model_norm = (self.judge_model or "").strip().lower()
+            if judge_model_norm.startswith("gpt-4o-mini"):
+                resolved_mode = "llm_score"
+            else:
+                resolved_mode = "decisions"
+            logger.info(
+                "detection_mode=%s (auto, judge_model=%s)",
+                resolved_mode,
+                self.judge_model,
+            )
+            self.detection_mode = resolved_mode
+        else:
+            self.detection_mode = mode
 
         self.articles = _load_json_list(
             articles_path or os.path.join(_COMMON_DATA_DIR, "articles.json"),

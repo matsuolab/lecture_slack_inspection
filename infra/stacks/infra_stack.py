@@ -144,9 +144,9 @@ class InfraStack(Stack):
             self,
             "DetectionMode",
             type="String",
-            default="llm_score",
-            allowed_values=["llm_score", "decisions", "luna"],
-            description="Violation detection mode (llm_score or decisions).",
+            default="auto",
+            allowed_values=["auto", "llm_score", "decisions", "luna"],
+            description="Violation detection mode (auto, llm_score, decisions, luna; auto resolves to llm_score if OPENAI_MODEL is gpt-4o-mini, otherwise decisions).",
         )
 
         min_severity_to_alert = CfnParameter(
