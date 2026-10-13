@@ -155,7 +155,7 @@ def _render_template(template: str, **vars: str) -> str:
     """{{ var }} を最小実装で置換 (依存追加なし)"""
     out = template
     for k, v in vars.items():
-        out = re.sub(r"{{\s*" + re.escape(k) + r"\s*}}", str(v), out)
+        out = re.sub(r"{{\s*" + re.escape(k) + r"\s*}}", lambda _m: str(v), out)
     return out
 
 
@@ -256,11 +256,19 @@ class ViolationDetector:
         if not article_id:
             return None
         s = str(article_id).strip()
+        if not s:
+            return None
 
-        # よくある「A-001 ...」形式から ID 部分だけ抜く
-        m = re.match(r"^([A-Za-z]+-\d+)", s)
+        # 条文一覧にある ID であればそのまま返す (切り詰めない)
+        if s in self._article_title_by_id:
+            return s
+
+        # よくある「A-001 ...」形式から ID 部分だけ抜く (枝番付き・ローマ数字も対応)
+        m = re.match(r"^([A-Za-z0-9]+(?:-[A-Za-z0-9]+)+)", s)
         if m:
-            s = m.group(1)
+            candidate = m.group(1)
+            if candidate in self._article_title_by_id:
+                s = candidate
 
         # title を返してきた場合は ID に戻す
         if s not in self._article_title_by_id and s in self._article_id_by_title:
@@ -323,6 +331,8 @@ class ViolationDetector:
             }
 
     def _choose_article(self, text: str, candidates: list[dict]) -> dict:
+        if not candidates:
+            raise ValueError("candidates cannot be empty")
         candidates_text = "\n".join(
             [
                 f"- {c.get('id', '')} {c.get('article') or ''} [{c.get('category') or ''}]: {c.get('content') or ''}"

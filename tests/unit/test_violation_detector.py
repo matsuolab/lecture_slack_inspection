@@ -9,6 +9,7 @@ from app_inspect.services.violation_detector import (
     DECISIONS_TIMEOUT_SECONDS,
     ViolationDetector,
     _DECISION_TEXT_PLACEHOLDER,
+    _render_template,
 )
 
 
@@ -813,3 +814,195 @@ def test_llm_score_mode_temperature_exception_and_retry_also_fails(
     assert mock_openai_client.chat.completions.create.call_count == 2
     assert result.is_violation is False
     assert result.reason.startswith("LLM判定エラー")
+
+
+@pytest.fixture
+def adversarial_articles_file(tmp_path):
+    articles_data = {
+        "articles": [
+            {
+                "id": "course-8-iv",
+                "article": "受講規約第8条(iv)",
+                "content": "講義資料等の無断転載・複製",
+                "category": "知的財産",
+            },
+            {
+                "id": "edu-3-ii",
+                "article": "受講生心得第3条(ii)",
+                "content": "他者への嫌がらせ行為",
+                "category": "迷惑行為",
+            },
+            {
+                "id": "course-10-ip",
+                "article": "受講規約第10条(ip)",
+                "content": "不正なソフトウェア利用",
+                "category": "不正利用",
+            },
+            {
+                "id": "11-xiii",
+                "article": "第11条(xiii)",
+                "content": "外部コミュニティへの勧誘や宣伝広告",
+                "category": "宣伝・勧誘",
+            },
+            {
+                "id": "reg-3",
+                "article": "共通規程第3条",
+                "content": "アカウントの不正貸与",
+                "category": "不正アクセス",
+            },
+        ]
+    }
+    file_path = tmp_path / "adversarial_articles.json"
+    file_path.write_text(json.dumps(articles_data, ensure_ascii=False), encoding="utf-8")
+    return str(file_path)
+
+
+# 1. _render_template に \d・\1・\g<0>・\n (2 文字) を含む値を入れても例外にならず、値がそのまま入る
+def test_render_template_with_escape_sequences():
+    template = "Header\n{{body}}\nFooter"
+    special_text = r"Pattern \d+ group \1 ref \g<0> newline \n literal"
+    result = _render_template(template, body=special_text)
+    assert result == f"Header\n{special_text}\nFooter"
+
+
+# 2. llm_score の経路で、本文に \d を含む投稿でも chat.completions.create が呼ばれ、prompt に本文がそのまま入る
+def test_llm_score_mode_with_special_escape_in_post(
+    adversarial_articles_file, mock_openai_client, monkeypatch
+):
+    monkeypatch.setenv("DETECTION_MODE", "llm_score")
+    mock_openai_client.chat.completions.create.return_value = MagicMock(
+        choices=[
+            MagicMock(
+                message=MagicMock(
+                    content=json.dumps(
+                        {"violation_score": 10, "confidence": 0.8, "article_id": None, "reason": "問題なし"}
+                    )
+                )
+            )
+        ]
+    )
+
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-4o-mini",
+        articles_path=adversarial_articles_file,
+    )
+    post_text = r"正規表現の \d+ について質問です。"
+    result = detector.detect(post_text)
+
+    mock_openai_client.chat.completions.create.assert_called_once()
+    call_kwargs = mock_openai_client.chat.completions.create.call_args.kwargs
+    prompt = call_kwargs["messages"][0]["content"]
+    assert post_text in prompt
+    assert result.is_violation is False
+
+
+# 3. _normalize_article_id: course-8-iv・edu-3-ii・course-10-ip・11-xiii・reg-3 はそのまま。" course-8-iv " (空白付き) も course-8-iv。"course-8-iv 講座受講規約" のような形からも course-8-iv。条文のタイトルを渡すと ID に戻る。None・空文字は None
+def test_normalize_article_id_all_patterns(adversarial_articles_file, mock_openai_client):
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-4o-mini",
+        articles_path=adversarial_articles_file,
+    )
+
+    # course-8-iv・edu-3-ii・course-10-ip・11-xiii・reg-3 はそのまま
+    assert detector._normalize_article_id("course-8-iv") == "course-8-iv"
+    assert detector._normalize_article_id("edu-3-ii") == "edu-3-ii"
+    assert detector._normalize_article_id("course-10-ip") == "course-10-ip"
+    assert detector._normalize_article_id("11-xiii") == "11-xiii"
+    assert detector._normalize_article_id("reg-3") == "reg-3"
+
+    # " course-8-iv " (空白付き) も course-8-iv
+    assert detector._normalize_article_id(" course-8-iv ") == "course-8-iv"
+
+    # "course-8-iv 講座受講規約" のような形からも course-8-iv
+    assert detector._normalize_article_id("course-8-iv 講座受講規約") == "course-8-iv"
+
+    # 条文のタイトルを渡すと ID に戻る
+    assert detector._normalize_article_id("受講規約第8条(iv)") == "course-8-iv"
+    assert detector._normalize_article_id("受講生心得第3条(ii)") == "edu-3-ii"
+    assert detector._normalize_article_id("受講規約第10条(ip)") == "course-10-ip"
+    assert detector._normalize_article_id("第11条(xiii)") == "11-xiii"
+    assert detector._normalize_article_id("共通規程第3条") == "reg-3"
+
+    # None・空文字は None
+    assert detector._normalize_article_id(None) is None
+    assert detector._normalize_article_id("") is None
+    assert detector._normalize_article_id("   ") is None
+
+
+# 4. decisions の経路で 2 段目が course-8-iv を選んだとき、detect の結果の article_id が course-8-iv で、reason の先頭に [course-8-iv <条文名>] が付く
+def test_decisions_mode_stage2_chooses_course_8_iv(
+    mocker, adversarial_articles_file, mock_openai_client, monkeypatch
+):
+    monkeypatch.setenv("DETECTION_MODE", "decisions")
+    mock_post = mocker.patch("app_inspect.services.violation_detector.requests.post")
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "answers": [
+            {
+                "name": "verdict",
+                "type": "choice",
+                "probabilities": [
+                    {"value": "warn", "probability": 0.95},
+                    {"value": "safe", "probability": 0.05},
+                ],
+            },
+            {
+                "name": "article",
+                "type": "choice",
+                "probabilities": [
+                    {"value": "course-8-iv", "probability": 0.7},
+                    {"value": "course-10-ip", "probability": 0.2},
+                    {"value": "reg-3", "probability": 0.1},
+                ],
+            },
+        ]
+    }
+    mock_post.return_value = mock_resp
+
+    mock_openai_client.chat.completions.create.return_value = MagicMock(
+        choices=[
+            MagicMock(
+                message=MagicMock(
+                    content=json.dumps(
+                        {"article_id": "course-8-iv", "reason": "講義資料の転載"}
+                    )
+                )
+            )
+        ]
+    )
+
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-6-luna",
+        articles_path=adversarial_articles_file,
+    )
+    result = detector.detect("テスト投稿")
+
+    assert result.is_violation is True
+    assert result.confidence == 0.95
+    assert result.method == "Decisions"
+    assert result.article_id == "course-8-iv"
+    assert result.category == "知的財産"
+    assert result.reason.startswith("[course-8-iv 受講規約第8条(iv)]")
+    assert "講義資料の転載" in result.reason
+
+
+# 5. _choose_article に空の候補を渡すと API を呼ばずに ValueError
+def test_choose_article_empty_candidates_raises_value_error(
+    adversarial_articles_file, mock_openai_client
+):
+    detector = ViolationDetector(
+        openai_client=mock_openai_client,
+        judge_model="gpt-4o-mini",
+        articles_path=adversarial_articles_file,
+    )
+    mock_openai_client.chat.completions.create.reset_mock()
+
+    with pytest.raises(ValueError):
+        detector._choose_article("テスト投稿", [])
+
+    mock_openai_client.chat.completions.create.assert_not_called()
+
