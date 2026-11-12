@@ -4,6 +4,7 @@ from .models import ModerationResult, normalize_result
 from .violation_detector import ViolationDetector
 
 
+
 def _confidence_to_severity(confidence: float) -> str:
     """確信度をseverityレベルに変換"""
     if confidence >= 0.8:
