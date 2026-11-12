@@ -18,6 +18,8 @@ cdk.out/
 
 # Eval datasets (managed externally via Google Drive, not Git)
 evals/promptfoo/datasets/
+# 評価の結果（投稿の本文を含む）
+evals/promptfoo/output/
 
 # 受講生の投稿・違反記録・ログの書き出し（個人情報。commit しない）
 # - violation_data.json: Notion の違反 DB の書き出し

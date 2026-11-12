@@ -1,79 +1,43 @@
-description: slack inspection - step3 LLM judge eval
+# Slack 監視 App の違反検知の評価（本番の判定のコード ViolationDetector をそのまま呼ぶ）
+# 使い方は evals/README.md。データセットは load_dataset.py で datasets/testcases.yaml に変換してから使う
+description: slack inspection - ViolationDetector eval (PJT04 dataset)
 
 providers:
-  - id: openai:chat:gpt-4o-mini
+  - id: file://provider.py
+    label: decisions
     config:
-      temperature: 0
-      response_format: file://../../lambda/app_inspect/services/data/prompts/judge_violation.response_format.json
+      mode: decisions   # decisions（新方式）／luna（予備経路だけ）／llm_score（旧方式）
+      # model: gpt-6-luna   # 省略時は mode ごとの既定
+      workers: 4         # 同時に判定する数。スロットリングが出たら下げる
+      # prompts_from_head: true   # プロンプトを git の HEAD の版から読む（既定は作業ツリーの版）
 
+# 投稿の本文をそのままプロバイダーに渡す
 prompts:
-  - id: file://../../lambda/app_inspect/services/data/prompts/judge_violation.txt
-    label: judge_violation
+  - "{{text}}"
 
 defaultTest:
-  options:
-    transform: JSON.parse(output)
   assert:
+    # 合否: 違反かどうかの一致。判定の失敗は不合格にし、理由に「判定の失敗」と書く（集計では取りこぼしと分ける）
     - type: javascript
       metric: Detection
       value: |
-        const output_isViolation = output.violation_score >= 51 ? 1 : 0;
-        const isCorrect = output_isViolation === context.vars.expected_is_violation;
-        return {
-          pass: isCorrect, 
-          score: isCorrect ? 1.0 : 0.0,
-          reason: `Detection - Expected: ${context.vars.expected_is_violation}, Got: ${output_isViolation}`
-        };
-
+        if (output.error) {
+          return { pass: false, score: 0, reason: `判定の失敗: ${output.error}` };
+        }
+        const ok = output.is_violation === context.vars.expected_is_violation;
+        return { pass: ok, score: ok ? 1 : 0,
+                 reason: `expected=${context.vars.expected_is_violation} got=${output.is_violation} (${output.method})` };
+    # 参考: 条文の一致（正しく警告したものだけを見る。合否には入れない）
     - type: javascript
       metric: Article
       weight: 0
       value: |
-        const expectedIsViolation = context.vars.expected_is_violation;
-        const expectedArticle = context.vars.expected_violating_article || '';
-        const gotArticle = output.article_id || '';
-        let isCorrect = false;
-        let reason = '';
-        
-        if (expectedIsViolation) {
-          isCorrect = String(expectedArticle) === String(gotArticle);
-          reason = isCorrect ? 'Match' : `Expected: ${expectedArticle}, Got: ${gotArticle}`;
-        } else {
-          isCorrect = true;
-          reason = 'Ignored (Non-violation case)';
+        if (output.error || !context.vars.expected_is_violation || !output.is_violation) {
+          return { pass: true, score: 1, reason: '対象外' };
         }
-        
-        return {
-          pass: true, 
-          score: isCorrect ? 1.0 : 0.0,
-          reason: `Article Check - ${reason}`
-        };
-
-    - type: javascript
-      metric: confidence
-      weight: 0 
-      value: |
-        const output_isViolation = output.violation_score >= 51 ? 1 : 0;
-        const isViolationCorrect = output_isViolation === context.vars.expected_is_violation;
-        const confidence = output.confidence ?? 0;
-        const degree = context.vars.degree;
-        let score, reason;
-        
-        if (isViolationCorrect) {
-          score = degree === '明確な違反'
-            ? (confidence >= 0.8 ? 1.0 : confidence >= 0.6 ? 0.7 : 0.3)
-            : (confidence >= 0.5 ? 1.0 : 0.5);
-          reason = `correct, confidence=${confidence} (${degree})`;
-        } else {
-          score = Math.max(0, 1.0 - confidence);
-          reason = `wrong prediction, confidence=${confidence} (overconfidence penalty)`;
-        }
-        
-        return { 
-          pass: true, 
-          score, 
-          reason 
-        };
+        const ok = output.article_id === context.vars.expected_article;
+        return { pass: true, score: ok ? 1 : 0,
+                 reason: `expected=${context.vars.expected_article} got=${output.article_id}` };
 
 tests:
-  - file://datasets/testcases_preview.yaml
+  - file://datasets/testcases.yaml
