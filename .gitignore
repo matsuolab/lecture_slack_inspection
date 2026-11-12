@@ -18,3 +18,15 @@ cdk.out/
 
 # Eval datasets (managed externally via Google Drive, not Git)
 evals/promptfoo/datasets/
+
+# 受講生の投稿・違反記録・ログの書き出し（個人情報。commit しない）
+# - violation_data.json: Notion の違反 DB の書き出し
+# - output.json / team_logs.json / output.csv: CloudWatch Logs の書き出し
+violation_data.json
+output.json
+output.csv
+team_logs.json
+
+# 講義の動画と文字起こし（このリポジトリの成果物ではない）
+*.mp4
+video*.txt
