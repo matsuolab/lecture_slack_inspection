@@ -2,7 +2,7 @@
 
 - 作成日: 2026-11-11
 - 版: 第 2 版（Claude の再現の確認と、Gemini 3.8 Flash (High) の敵対レビューを反映）
-- 基準: コミット `cae84fc`（行番号はすべてこのコミットで数えた。`python3 docs/requirements/evidence/check_line_refs.py cae84fc <文書>` で照合できる。作業ツリーの `moderation.py`・`slack_notifier.py` は空行 1 行の分だけずれている）。根拠の残し方は `.claude/rules/evidence.md`。現状の動きは [現状の仕様](current_system.md)、既存ドキュメントとの食い違いは [照合の記録](../research/20261111_doc_audit.md)
+- 基準: コミット `cae84fc`（行番号はすべてこのコミットで数えた。`python3 docs/requirements/evidence/check_line_refs.py cae84fc <文書>` で照合できる。作業ツリーの `moderation.py`・`slack_notifier.py` は空行 1 行の分だけずれている）。現状の動きは [現状の仕様](current_system.md)、既存ドキュメントとの食い違いは 照合の記録（内部資料。リポジトリには置いていない）
 - 優先の基準: **判定漏れ（警告すべき投稿の見逃し）を出さないこと**を最優先にする（運営の方針）。次に、誤った対応（誤って対応終了にする・二重に警告する）、運用で気づけないこと、の順
 
 ## 区分
@@ -12,7 +12,7 @@
 | 重大度 | **高**: 判定漏れ・誤った対応が、黙って起きる／**中**: 条件付きで起きる、または気づける／**低**: 保守性・将来のリスク |
 | 確度 | **再現済み**: 本物のコードを呼んで（外部サービスはモック）現象を再現した／**確認済み**: コード・設定・公式の資料を読んで確かめた（実行はしていない）／**要再現**: コードからは強く疑われるが、Slack などの実際の挙動を検証用ワークスペースで確かめる必要がある／**要確認**: 外部の条件（契約・設定・Notion の実物）次第 |
 
-再現の方法: `lambda/` を import し、Slack・OpenAI・Notion・SSM をモックにして、該当の関数を呼んだ。第 1 版の再現のスクリプトは scratchpad に置いたため消えた。2026-11-12 に、同じ再現を `tests/repro/test_iss<番号>_*.py` の特性テスト（今の不具合のある動きを assert する。直したら期待値を書き換える）として作り直し、**テストが通ったものだけを「再現済み」とした**。各課題の「裏取り」にテストのファイルを書いた。根拠の残し方は `.claude/rules/evidence.md`。
+再現の方法: `lambda/` を import し、Slack・OpenAI・Notion・SSM をモックにして、該当の関数を呼んだ。第 1 版の再現のスクリプトは scratchpad に置いたため消えた。2026-11-12 に、同じ再現を `tests/repro/test_iss<番号>_*.py` の特性テスト（今の不具合のある動きを assert する。直したら期待値を書き換える）として作り直し、**テストが通ったものだけを「再現済み」とした**。各課題の「裏取り」にテストのファイルを書いた。
 
 ## 一覧
 
@@ -80,7 +80,7 @@
 - 既存の計画書: `docs/specs/20261013_slack-3s-ack.md`（案 A: 非同期の自己呼び出しを推奨、未決）
 - 公式の資料で確認した仕様（https://docs.slack.dev/apis/events-api/）: 3 秒以内に 2xx。再送は 3 回（すぐ・1 分後・5 分後）。60 分間で 95% を超えて失敗すると購読を一時停止。ただし 1 時間 1,000 件未満のアプリは対象外
 - 実測（2026-08-13 のログ、約 7 時間）: 実行 80 回のうち 26 回が 3 秒を超えた（p90 約 5.6 秒、最大 7.8 秒）。判定した 32 件のうち 30 件で 1 回目の再送が来た（すべて捨てた）
-- **ログの数値についての注意（2026-11-12）:** この節の数値は 1 日分（約 7 時間）のログで、判定方式の移行の前（`llm_score`、OpenAI の呼び出し 1 回）のもの。集計のスクリプトは残っていない（`.claude/rules/evidence.md` の前の作業）。数値は運営が別途確かめる。p90 はこの節では約 5.6 秒、照合の記録の S6 では 5.7 秒と食い違っている。コードから言えること（ログに頼らない）は [decisions.md の D2](decisions.md) の「コードから言えること」にまとめた
+- **ログの数値についての注意（2026-11-12）:** この節の数値は 1 日分（約 7 時間）のログで、判定方式の移行の前（`llm_score`、OpenAI の呼び出し 1 回）のもの。集計のスクリプトは残っていない。数値は運営が別途確かめる。p90 はこの節では約 5.6 秒、照合の記録の S6 では 5.7 秒と食い違っている。コードから言えること（ログに頼らない）は [decisions.md の D2](decisions.md) の「コードから言えること」にまとめた
 - 3 秒を超えると何が起きるか（コードとログで確認）:
   - Slack が同じ通知を送り直す。ボットは送り直しを、署名の確認より前にすべて 200 で捨てる（`app_inspect/handler.py:89-95`）ので、二重の判定・通知は起きない
   - Slack が待つのをやめても、Lambda は最後まで動く（判定・記録・通知は行われる）
@@ -273,14 +273,14 @@
 - 現象: OpenAI のキーは SSM のパラメータ 1 つで、全ワークスペースの `app_inspect` と `app_batch` が共有する（`app_inspect/services/config.py:47`、`app_batch/services/config.py:35`）。Lambda の同時実行数に上限が無い。Decisions API はどんな例外でも予備経路（Chat Completions 2 回）に切り替わる（`violation_detector.py:173-182`）ので、429 の最中に呼び出しが増える。Decisions API の呼び出しは再試行も `Retry-After` の扱いも無い（`violation_detector.py:367-376`）。最後は黙って「違反なし」（ISS-01）
 - 公式の資料（2026-11-12）: OpenAI のレート制限は**組織とプロジェクトの単位**で、キーの単位ではない（キーを増やしても上限は増えない）。gpt-6-luna は Build の段階で 5,000 RPM・200 万 TPM。失敗したリクエストも上限に数えられる。使用額の上限に届いても 429（https://developers.openai.com/api/docs/guides/rate-limits 、https://developers.openai.com/api/docs/models/gpt-6-luna ）
 - 影響: 平均の投稿数では遠いが（1 投稿約 5,000 トークンの推計で、Build でも 1 分に約 380 件）、集中・他のアプリとの共有・使用額の上限で 429 になると、その間の投稿が黙って判定漏れになる
-- 裏取り: 確認済み（コードと公式の資料）。上限に届く規模は推計。詳細と対処の選択肢は [検討の記録](../research/20261112_scaling_openai_notion.md)
+- 裏取り: 確認済み（コードと公式の資料）。上限に届く規模は推計。詳細と対処の選択肢は 検討の記録（内部資料。リポジトリには置いていない）
 
 ### ISS-34 Notion の呼び出しの上限と保存数（投稿の増加）
 
 - 現象: Notion の API キーも 1 つで、全 Lambda が同じ接続を使う（`app_inspect/services/config.py:48`）。違反でない投稿 1 件でも、ワークスペースの検索・ローカルルール・ヘルスチェックの検索と更新で 3〜4 回呼ぶ（`app_inspect/handler.py:52-54, 171`、`notion_client.py:461-514`）。違反ならさらに 6〜7 回。検索のページ送りは `has_more` だけを見て、結果の打ち切り（`request_status`）を見ない（`notion_client.py:119-127`）
 - 公式の資料（2026-11-12）: 1 接続あたり 1 分 180 回（Business・Enterprise は 600 回）、別にワークスペースで共有する上限（数値は非公開）。1 回の検索の結果は最大 1 万件。1 データベース 25 万行まで、届くと行を足せない（https://developers.notion.com/reference/request-limits 、https://developers.notion.com/guides/data-apis/query-large-data-sources 、https://www.notion.com/help/optimize-database-load-times-and-performance ）
 - 影響: 集中した 1 分に約 40 件の投稿で 1 接続の上限に届く（推計）。OpenAI より先に届く。届いたときの 429 は扱っておらず（ISS-16）、記録が落ちる（ISS-12）。違反 DB の 25 万行は、1 日 1 万件・違反 5% なら約 1.4 年で届く（推計）
-- 裏取り: 確認済み（コードと公式の資料）。届く規模は推計。詳細は [検討の記録](../research/20261112_scaling_openai_notion.md)
+- 裏取り: 確認済み（コードと公式の資料）。届く規模は推計。詳細は 検討の記録（内部資料。リポジトリには置いていない）
 
 ## 敵対レビューの採否（Gemini 3.8 Flash (High)、2026-11-11）
 

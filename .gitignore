@@ -32,3 +32,6 @@ team_logs.json
 # 講義の動画と文字起こし（このリポジトリの成果物ではない）
 *.mp4
 video*.txt
+
+# Claude の作業ルール・設定・記録（commit しない。手元で使う）
+.claude/
