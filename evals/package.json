@@ -1,5 +1,11 @@
 {
+  "private": true,
+  "description": "Slack 監視 App の違反検知の評価（promptfoo）。使い方は README.md",
   "devDependencies": {
-    "promptfoo": "^0.120.19"
+    "promptfoo": "0.120.19"
+  },
+  "scripts": {
+    "eval": "cd promptfoo && promptfoo eval --no-cache -o output/results.json",
+    "view": "cd promptfoo && promptfoo view"
   }
 }
