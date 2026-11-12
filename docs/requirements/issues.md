@@ -50,6 +50,8 @@
 | ISS-30 | `app_batch` の `dry_run` で、受講生の投稿本文の先頭 200 文字を CloudWatch Logs に出す | 低 | 確認済み | 個人情報 |
 | ISS-31 | OAuth の `state` が使い捨てになっていない | 低 | 確認済み | セキュリティ |
 | ISS-32 | Slack の送り直しを、理由（`x-slack-retry-reason`）を見ずにすべて捨てる。最初の 1 回が届かなかった・途中で失敗した投稿は一度も判定されない | 中 | 再現済み（発生頻度は未測定） | 判定漏れ |
+| ISS-33 | OpenAI を 1 つの組織・プロジェクト・キーで全ワークスペースから呼び、429（レート制限・使用額の上限）の扱いが無い。Decisions API の 429 で予備経路に切り替わり、呼び出しが増える。上限にかかると黙って「違反なし」 | 中 | 確認済み（コード・公式の資料。上限に届く規模は推計） | 判定漏れ・規模 |
+| ISS-34 | Notion を 1 つの接続で全 Lambda から呼び、違反でない投稿 1 件でも 3〜4 回呼ぶ。1 接続 1 分 180 回の上限に、集中した 1 分に約 40 件で届く（推計）。違反 DB は 1 データベース 25 万行が上限。検索の 1 万件の打ち切りを見ない | 中 | 確認済み（コード・公式の資料。届く規模は推計） | 規模・データ |
 
 ## 詳細
 
@@ -266,6 +268,20 @@
 - 裏取り: 再現済み。`x-slack-retry-reason` が `http_timeout`・`connection_failed`・`http_error` のどれでも、判定の関数も署名の確認も呼ばれずに 200 になった。2026-08-13 のログでは、送り直し 30 件のすべてに判定済みの最初の 1 回があり、取りこぼしは見つかっていない。理由はログに残していないので、普段の発生頻度は分からない（テスト: `tests/repro/test_iss32_retry_discarded_regardless_of_reason.py`）
 - 対応の方向: D2（返事と判定を分ける）と合わせて決める。最低限、理由をログに残す
 
+### ISS-33 OpenAI のレート制限（投稿の増加）
+
+- 現象: OpenAI のキーは SSM のパラメータ 1 つで、全ワークスペースの `app_inspect` と `app_batch` が共有する（`app_inspect/services/config.py:47`、`app_batch/services/config.py:35`）。Lambda の同時実行数に上限が無い。Decisions API はどんな例外でも予備経路（Chat Completions 2 回）に切り替わる（`violation_detector.py:173-182`）ので、429 の最中に呼び出しが増える。Decisions API の呼び出しは再試行も `Retry-After` の扱いも無い（`violation_detector.py:367-376`）。最後は黙って「違反なし」（ISS-01）
+- 公式の資料（2026-11-12）: OpenAI のレート制限は**組織とプロジェクトの単位**で、キーの単位ではない（キーを増やしても上限は増えない）。gpt-6-luna は Build の段階で 5,000 RPM・200 万 TPM。失敗したリクエストも上限に数えられる。使用額の上限に届いても 429（https://developers.openai.com/api/docs/guides/rate-limits 、https://developers.openai.com/api/docs/models/gpt-6-luna ）
+- 影響: 平均の投稿数では遠いが（1 投稿約 5,000 トークンの推計で、Build でも 1 分に約 380 件）、集中・他のアプリとの共有・使用額の上限で 429 になると、その間の投稿が黙って判定漏れになる
+- 裏取り: 確認済み（コードと公式の資料）。上限に届く規模は推計。詳細と対処の選択肢は [検討の記録](../research/20261112_scaling_openai_notion.md)
+
+### ISS-34 Notion の呼び出しの上限と保存数（投稿の増加）
+
+- 現象: Notion の API キーも 1 つで、全 Lambda が同じ接続を使う（`app_inspect/services/config.py:48`）。違反でない投稿 1 件でも、ワークスペースの検索・ローカルルール・ヘルスチェックの検索と更新で 3〜4 回呼ぶ（`app_inspect/handler.py:52-54, 171`、`notion_client.py:461-514`）。違反ならさらに 6〜7 回。検索のページ送りは `has_more` だけを見て、結果の打ち切り（`request_status`）を見ない（`notion_client.py:119-127`）
+- 公式の資料（2026-11-12）: 1 接続あたり 1 分 180 回（Business・Enterprise は 600 回）、別にワークスペースで共有する上限（数値は非公開）。1 回の検索の結果は最大 1 万件。1 データベース 25 万行まで、届くと行を足せない（https://developers.notion.com/reference/request-limits 、https://developers.notion.com/guides/data-apis/query-large-data-sources 、https://www.notion.com/help/optimize-database-load-times-and-performance ）
+- 影響: 集中した 1 分に約 40 件の投稿で 1 接続の上限に届く（推計）。OpenAI より先に届く。届いたときの 429 は扱っておらず（ISS-16）、記録が落ちる（ISS-12）。違反 DB の 25 万行は、1 日 1 万件・違反 5% なら約 1.4 年で届く（推計）
+- 裏取り: 確認済み（コードと公式の資料）。届く規模は推計。詳細は [検討の記録](../research/20261112_scaling_openai_notion.md)
+
 ## 敵対レビューの採否（Gemini 3.8 Flash (High)、2026-11-11）
 
 番号付きの指摘 26 件と総評。Claude がコードの再現・公式の資料で確かめてから採否を決めた（採用 23 件、不採用 3 件と総評の 1 点）。
@@ -309,6 +325,7 @@
 | D8 | 失敗を誰に・どう知らせるか | ISS-15 |
 | D9 | 個人情報（投稿本文）をどこに・どれだけ残すか | ISS-30・24 |
 | D10 | 進める順序と、判定方式の移行との関係 | ISS-07・10・20 |
+| D11 | 投稿の増加への備え（OpenAI のレート制限・Notion の上限） | ISS-16・33・34 |
 
 ## 検証用ワークスペースで確かめること（要再現・要確認）
 
